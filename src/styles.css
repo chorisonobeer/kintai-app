@@ -1,0 +1,316 @@
+:root {
+    --primary-color: #3d5afe;
+    --header-color: #303f9f;
+    --button-color: #2196f3;
+    --edit-button-color: #ff9800;
+    --saved-button-color: #4caf50;
+    --secondary-color: #546e7a;
+    --background-color: #f5f8fa;
+    --picker-bg: #f0f4f8;
+    --card-bg: #ffffff;
+    --text-primary: #263238;
+    --text-secondary: #546e7a;
+    --border-color: #e0e6ed;
+    --error-color: #f44336;
+  }
+  
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    margin: 0;
+    padding: 0;
+  }
+  
+  body {
+    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    touch-action: manipulation;
+  }
+  
+  .container {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .header {
+    padding: 0 16px;
+    background-color: var(--header-color);
+    color: white;
+    text-align: center;
+    z-index: 10;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+  }
+  
+  .kintai-form {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    padding: 16px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .form-group {
+    margin-bottom: 32px;
+  }
+  
+  .form-group label {
+    display: inline-block;
+    font-weight: 800;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+    vertical-align: middle;
+  }
+  
+  .time-display{
+    display: inline-block;
+    font-size: 2rem;
+    font-weight: 500;
+    color: var(--primary-color);
+    margin-left: 100px;
+    vertical-align: middle;
+  }
+  
+  .date-display {
+    display: inline-block;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--primary-color);
+    margin-left: 100px;
+    vertical-align: middle;
+  }
+  
+  .time-picker-wrapper, .date-picker-wrapper {
+    width:60vw;
+    position: relative;
+    background-color: var(--picker-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    user-select: none;
+    margin-top: 8px;
+    margin-bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  
+  .picker-container {
+    -ms-touch-action: none;
+    touch-action: none;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-overflow-scrolling: auto;
+    overscroll-behavior: none;
+  }
+  
+  .picker-highlight {
+    position: absolute;
+    width: 100%;
+    height: 30px;
+    top: 50%;
+    margin-top: -15px;
+    pointer-events: none;
+    background-color: rgba(61, 90, 254, 0.08);
+    border-top: 1px solid var(--primary-color);
+    border-bottom: 1px solid var(--primary-color);
+  }
+  
+  .button-container {
+    margin-top: 16px;
+    margin-bottom: 8px;
+  }
+  
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background-color: var(--button-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn:hover:not(:disabled) {
+    background-color: #1976d2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+  }
+  
+  .btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
+  }
+  
+  .btn:disabled {
+    background-color: var(--secondary-color);
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  
+  /* 保存済み状態のボタン */
+  .btn-saved {
+    background-color: var(--saved-button-color);
+    text-align: center;
+  }
+  
+  .btn-saved:hover:not(:disabled) {
+    background-color: #388e3c;
+  }
+  
+  /* 編集モードのボタン */
+  .btn-edit {
+    background-color: var(--edit-button-color);
+  }
+  
+  .btn-edit:hover:not(:disabled) {
+    background-color: #f57c00;
+  }
+  
+  /* 長押し効果 */
+  .btn-press-effect::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.3);
+    opacity: 0;
+    transition: opacity 0.7s ease;
+  }
+  
+  .btn-pressing::after {
+    opacity: 1;
+  }
+  
+  /* 保存済みメッセージ */
+  .saved-message {
+    font-size: 14px;
+    line-height: 1.4;
+    display: block;
+  }
+  
+  .hint-text {
+    font-size: 12px;
+    opacity: 0.9;
+    display: block;
+    margin-top: 4px;
+  }
+  
+  .error-message {
+    color: var(--error-color);
+    font-size: 13px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+  }
+  
+  .error-message::before {
+    content: "⚠️";
+    margin-right: 4px;
+    font-size: 12px;
+  }
+  
+  .disabled-form {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  
+  .disabled-message {
+    background-color: var(--error-color);
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    text-align: center;
+    font-weight: 500;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
+  }
+  
+  /* モバイルピッカーのスタイル上書き */
+  .picker-column {
+    margin: 0 4px;
+  }
+  
+  .picker-scroller {
+    height: 90px !important;
+    touch-action: none !important;
+    pointer-events: auto !important;
+    user-select: none !important;
+    -webkit-overflow-scrolling: auto !important;
+    overscroll-behavior: none !important;
+  }
+  
+  .picker-item {
+    font-size: 16px !important;
+    color: var(--text-secondary) !important;
+    height: 30px !important;
+    line-height: 30px !important;
+  }
+  
+  .picker-item.picker-item-selected {
+    color: var(--primary-color) !important;
+    font-weight: 600 !important;
+  }
+
+  /* ログイン画面のスタイル */
+.login-title {
+    text-align: center;
+    margin-bottom: 24px;
+    color: var(--text-primary);
+    font-size: 24px;
+  }
+  
+  .input-wrapper {
+    background-color: var(--picker-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  
+  .login-input {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    background-color: transparent;
+    font-size: 16px;
+    color: var(--text-primary);
+    outline: none;
+  }
+  
+  .login-input:focus {
+    box-shadow: 0 0 0 2px var(--primary-color);
+  }
+  
+  .login-input:disabled {
+    opacity: 0.7;
+  }

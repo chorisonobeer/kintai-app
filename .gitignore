@@ -1,0 +1,39 @@
+# 開発環境 / ビルド関連
+node_modules/
+dist/
+.temp/
+.cache/
+*.local
+
+# ログファイル
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 環境変数ファイル
+.env
+.env.local
+.env.development
+.env.production
+
+# IDE / エディタ関連
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# テスト / カバレッジ
+coverage/
+.nyc_output/
+
+# システムファイル
+.DS_Store
+Thumbs.db
+
+# Vite 固有
+*.env
+.env.*
