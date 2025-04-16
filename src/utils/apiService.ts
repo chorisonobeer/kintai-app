@@ -1,7 +1,7 @@
 import { KintaiData } from '../types';
 
-// Apps Scriptのデプロイ済みウェブアプリURL
-const API_URL = 'https://script.google.com/macros/s/AKfycbxRLlPOm5YCZKwnM92b27feUP-Vadp0ygPJAAV4mCK7kDkZAWsthIOl6pJ3dQz8Oy8BGw/exec';
+// Google Apps ScriptのデプロイURLを設定
+const API_URL = 'https://script.google.com/macros/s/AKfycbwLNfhqfY70U4B27BHd844ei7gWnfviVxzwmWFxcHiMQbFQYii6VhGfWOUC6qyB6GpmUA/exec';
 
 // ローカルストレージのキー
 const TOKEN_KEY = 'kintai_token';
@@ -9,41 +9,100 @@ const USER_ID_KEY = 'kintai_user_id';
 const USER_NAME_KEY = 'kintai_user_name';
 
 /**
+ * JSONP方式でAPIを呼び出す汎用関数
+ * @param params URLパラメータオブジェクト
+ * @returns Promise<any>
+ */
+function callJSONP(params: Record<string, string>): Promise<any> {
+  return new Promise((resolve, reject) => {
+    // ユニークなコールバック関数名を生成
+    const callbackName = `jsonp_callback_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+    
+    // グローバルにコールバック関数を定義
+    (window as any)[callbackName] = (response: any) => {
+      // スクリプトを削除
+      if (script.parentNode) {
+        document.body.removeChild(script);
+      }
+      // グローバル空間からコールバック関数を削除
+      delete (window as any)[callbackName];
+      // レスポンスを返す
+      resolve(response);
+    };
+    
+    // URLパラメータを構築
+    const urlParams = new URLSearchParams();
+    // コールバック関数名を追加
+    urlParams.append('callback', callbackName);
+    // その他のパラメータを追加
+    Object.entries(params).forEach(([key, value]) => {
+      urlParams.append(key, value);
+    });
+    
+    // スクリプトタグを作成
+    const script = document.createElement('script');
+    script.src = `${API_URL}?${urlParams.toString()}`;
+    
+    // エラーハンドリング
+    script.onerror = () => {
+      if (script.parentNode) {
+        document.body.removeChild(script);
+      }
+      delete (window as any)[callbackName];
+      reject(new Error('ネットワークエラーが発生しました'));
+    };
+    
+    // タイムアウト設定（10秒）
+    const timeoutId = setTimeout(() => {
+      if (script.parentNode) {
+        document.body.removeChild(script);
+      }
+      delete (window as any)[callbackName];
+      reject(new Error('タイムアウトが発生しました'));
+    }, 10000);
+    
+    // レスポンスを受け取ったらタイムアウトをクリア
+    const originalCallback = (window as any)[callbackName];
+    (window as any)[callbackName] = (response: any) => {
+      clearTimeout(timeoutId);
+      originalCallback(response);
+    };
+    
+    // スクリプトをドキュメントに追加して実行
+    document.body.appendChild(script);
+  });
+}
+
+/**
  * ログイン処理
- * @param email メールアドレス
- * @param password パスワード
+ * @param email ユーザーのメールアドレス
+ * @param password ユーザーのパスワード
  * @returns ログイン結果
  */
-export const login = async (email: string, password: string): Promise<{success: boolean, error?: string}> => {
+export const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        action: 'login',
-        payload: {
-          email,
-          passwordPlain: password
-        }
-      })
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      // トークン情報をlocalStorageに保存
-      localStorage.setItem(TOKEN_KEY, data.token);
-      localStorage.setItem(USER_ID_KEY, data.userId);
-      localStorage.setItem(USER_NAME_KEY, data.userName);
+    // パラメータオブジェクトを作成
+    const params: Record<string, string> = {
+      action: 'login',
+      email: email,
+      password: password
+    };
+    
+    // JSONP呼び出し
+    const response = await callJSONP(params);
+    
+    if (response.success) {
+      // トークンなどをローカルストレージに保存
+      localStorage.setItem(TOKEN_KEY, response.token);
+      localStorage.setItem(USER_ID_KEY, response.userId);
+      localStorage.setItem(USER_NAME_KEY, response.userName);
       return { success: true };
     } else {
-      return { success: false, error: data.error || 'ログインに失敗しました' };
+      return { success: false, error: response.error || 'ログインに失敗しました' };
     }
   } catch (error) {
     console.error('Login error:', error);
-    return { success: false, error: '通信エラーが発生しました' };
+    return { success: false, error: error instanceof Error ? error.message : '通信エラーが発生しました' };
   }
 };
 
@@ -55,23 +114,20 @@ export const logout = async (): Promise<void> => {
   
   if (token) {
     try {
-      // サーバー側でもトークンを無効化
-      await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          action: 'logout',
-          token
-        })
-      });
+      // パラメータオブジェクトを作成
+      const params: Record<string, string> = {
+        action: 'logout',
+        token: token
+      };
+      
+      // JSONP呼び出し
+      await callJSONP(params);
     } catch (error) {
       console.error('Logout error:', error);
     }
   }
 
-  // ローカルストレージからトークン情報を削除
+  // ローカルストレージをクリア
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_ID_KEY);
   localStorage.removeItem(USER_NAME_KEY);
@@ -82,7 +138,7 @@ export const logout = async (): Promise<void> => {
  * @param kintaiData 勤怠データ
  * @returns 保存結果
  */
-export const saveKintaiToServer = async (kintaiData: KintaiData): Promise<{success: boolean, error?: string}> => {
+export const saveKintaiToServer = async (kintaiData: KintaiData): Promise<{ success: boolean; error?: string }> => {
   const token = localStorage.getItem(TOKEN_KEY);
   
   if (!token) {
@@ -90,34 +146,32 @@ export const saveKintaiToServer = async (kintaiData: KintaiData): Promise<{succe
   }
 
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        action: 'saveKintai',
-        token,
-        payload: {
-          date: kintaiData.date,
-          startTime: kintaiData.startTime,
-          breakTime: kintaiData.breakTime,
-          endTime: kintaiData.endTime,
-          location: kintaiData.location || '' // locationが未定義の場合は空文字を送信
-        }
-      })
-    });
+    // パラメータオブジェクトを作成
+    const params: Record<string, string> = {
+      action: 'saveKintai',
+      token: token,
+      date: kintaiData.date,
+      startTime: kintaiData.startTime,
+      breakTime: kintaiData.breakTime.toString(),
+      endTime: kintaiData.endTime
+    };
+    
+    // 作業場所が指定されている場合は追加
+    if (kintaiData.location) {
+      params.location = kintaiData.location;
+    }
+    
+    // JSONP呼び出し
+    const response = await callJSONP(params);
 
-    const data = await response.json();
-
-    if (data.success) {
+    if (response.success) {
       return { success: true };
     } else {
-      return { success: false, error: data.error || 'データの保存に失敗しました' };
+      return { success: false, error: response.error || 'データの保存に失敗しました' };
     }
   } catch (error) {
     console.error('Save kintai error:', error);
-    return { success: false, error: '通信エラーが発生しました' };
+    return { success: false, error: error instanceof Error ? error.message : '通信エラーが発生しました' };
   }
 };
 

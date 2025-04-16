@@ -37,3 +37,5 @@ Thumbs.db
 # Vite 固有
 *.env
 .env.*
+# Local Netlify folder
+.netlify

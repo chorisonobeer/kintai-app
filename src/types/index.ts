@@ -3,6 +3,7 @@ export interface KintaiData {
     startTime: string;
     breakTime: number;
     endTime: string;
+  location: string;
   }
   
   export interface MobileTimePickerProps {

@@ -68,7 +68,8 @@ const KintaiForm: React.FC<KintaiFormProps> = ({ onLogout }) => {
     date: getCurrentDate(),
     startTime: '09:00',
     breakTime: 60,
-    endTime: '18:00'
+    endTime: '18:00',
+    location: ''
   });
 
   // バリデーションエラーの状態
@@ -127,7 +128,8 @@ const KintaiForm: React.FC<KintaiFormProps> = ({ onLogout }) => {
         date,
         startTime: '09:00',
         breakTime: 60,
-        endTime: '18:00'
+        endTime: '18:00',
+        location: ''
       });
     }
   }, []);
