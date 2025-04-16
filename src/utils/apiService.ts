@@ -1,7 +1,7 @@
 import { KintaiData } from '../types';
 
 // Google Apps ScriptのデプロイURLを設定
-const API_URL = 'https://script.google.com/macros/s/AKfycbwLNfhqfY70U4B27BHd844ei7gWnfviVxzwmWFxcHiMQbFQYii6VhGfWOUC6qyB6GpmUA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyalxhN9BsxRpi38Bmt5JbPvSrcATxSdTTK3XZHtivUz7KyrxVYScAip0SLLG6HtsAIMQ/exec';
 
 // ローカルストレージのキー
 const TOKEN_KEY = 'kintai_token';
@@ -14,64 +14,62 @@ const USER_NAME_KEY = 'kintai_user_name';
  * @returns Promise<any>
  */
 function callJSONP(params: Record<string, string>): Promise<any> {
-  return new Promise((resolve, reject) => {
-    // ユニークなコールバック関数名を生成
-    const callbackName = `jsonp_callback_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
-    
-    // グローバルにコールバック関数を定義
-    (window as any)[callbackName] = (response: any) => {
-      // スクリプトを削除
-      if (script.parentNode) {
+    return new Promise((resolve, reject) => {
+      // ユニークなコールバック関数名を生成
+      const callbackName = `jsonp_callback_${Date.now()}`;
+      
+      // グローバルにコールバック関数を定義
+      (window as any)[callbackName] = (response: any) => {
+        // レスポンスを受け取ったらタイムアウトをクリア
+        clearTimeout(timeoutId);
+        
+        // スクリプトを削除
         document.body.removeChild(script);
-      }
-      // グローバル空間からコールバック関数を削除
-      delete (window as any)[callbackName];
-      // レスポンスを返す
-      resolve(response);
-    };
-    
-    // URLパラメータを構築
-    const urlParams = new URLSearchParams();
-    // コールバック関数名を追加
-    urlParams.append('callback', callbackName);
-    // その他のパラメータを追加
-    Object.entries(params).forEach(([key, value]) => {
-      urlParams.append(key, value);
+        
+        // グローバル空間からコールバック関数を削除
+        delete (window as any)[callbackName];
+        
+        // レスポンスを返す
+        resolve(response);
+      };
+      
+      // URLパラメータを構築
+      const urlParams = new URLSearchParams();
+      // コールバック関数名を追加
+      urlParams.append('callback', callbackName);
+      // その他のパラメータを追加
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          urlParams.append(key, String(value));
+        }
+      });
+      
+      // スクリプトタグを作成
+      const script = document.createElement('script');
+      // URLを構築する際に、余分なパスが入らないように注意
+      script.src = `${API_URL}?${urlParams.toString()}`;
+      
+      // エラーハンドリング
+      script.onerror = () => {
+        clearTimeout(timeoutId);
+        document.body.removeChild(script);
+        delete (window as any)[callbackName];
+        reject(new Error('ネットワークエラーが発生しました'));
+      };
+      
+      // タイムアウト設定（10秒）
+      const timeoutId = setTimeout(() => {
+        if (script.parentNode) {
+          document.body.removeChild(script);
+        }
+        delete (window as any)[callbackName];
+        reject(new Error('タイムアウトが発生しました'));
+      }, 10000);
+      
+      // スクリプトをドキュメントに追加して実行
+      document.body.appendChild(script);
     });
-    
-    // スクリプトタグを作成
-    const script = document.createElement('script');
-    script.src = `${API_URL}?${urlParams.toString()}`;
-    
-    // エラーハンドリング
-    script.onerror = () => {
-      if (script.parentNode) {
-        document.body.removeChild(script);
-      }
-      delete (window as any)[callbackName];
-      reject(new Error('ネットワークエラーが発生しました'));
-    };
-    
-    // タイムアウト設定（10秒）
-    const timeoutId = setTimeout(() => {
-      if (script.parentNode) {
-        document.body.removeChild(script);
-      }
-      delete (window as any)[callbackName];
-      reject(new Error('タイムアウトが発生しました'));
-    }, 10000);
-    
-    // レスポンスを受け取ったらタイムアウトをクリア
-    const originalCallback = (window as any)[callbackName];
-    (window as any)[callbackName] = (response: any) => {
-      clearTimeout(timeoutId);
-      originalCallback(response);
-    };
-    
-    // スクリプトをドキュメントに追加して実行
-    document.body.appendChild(script);
-  });
-}
+  }
 
 /**
  * ログイン処理
