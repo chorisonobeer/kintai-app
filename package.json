@@ -10,10 +10,12 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "node-fetch": "^3.3.2",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-mobile-picker": "^1.1.1",
-        "styled-components": "^6.1.17"
+        "styled-components": "^6.1.17",
+        "undici": "^7.8.0"
     },
     "devDependencies": {
         "@types/react": "^18.2.15",

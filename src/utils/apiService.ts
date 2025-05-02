@@ -1,198 +1,318 @@
-import { KintaiData } from '../types';
-
-// Google Apps ScriptのデプロイURLを設定
-const API_URL = 'https://script.google.com/macros/s/AKfycbyalxhN9BsxRpi38Bmt5JbPvSrcATxSdTTK3XZHtivUz7KyrxVYScAip0SLLG6HtsAIMQ/exec';
-
-// ローカルストレージのキー
-const TOKEN_KEY = 'kintai_token';
-const USER_ID_KEY = 'kintai_user_id';
-const USER_NAME_KEY = 'kintai_user_name';
-
-/**
- * JSONP方式でAPIを呼び出す汎用関数
- * @param params URLパラメータオブジェクト
- * @returns Promise<any>
+/**  src/apiService.ts                              2025‑05‑01-v1
+ *  ──────────────────────────────────────────────────────────
+ *  - login / logout / saveKintai / getHistory / getMonthlyData
+ *  - DEBUG_MODE で GAS 内部 debug を受信
+ *  - strictNullChecks/noImplicitAny すべてエラー 0 を確認
+ *  - 月間データ取得機能追加
+ *  ──────────────────────────────────────────────────────────
  */
-function callJSONP(params: Record<string, string>): Promise<any> {
-    return new Promise((resolve, reject) => {
-      // ユニークなコールバック関数名を生成
-      const callbackName = `jsonp_callback_${Date.now()}`;
-      
-      // グローバルにコールバック関数を定義
-      (window as any)[callbackName] = (response: any) => {
-        // レスポンスを受け取ったらタイムアウトをクリア
-        clearTimeout(timeoutId);
-        
-        // スクリプトを削除
-        document.body.removeChild(script);
-        
-        // グローバル空間からコールバック関数を削除
-        delete (window as any)[callbackName];
-        
-        // レスポンスを返す
-        resolve(response);
-      };
-      
-      // URLパラメータを構築
-      const urlParams = new URLSearchParams();
-      // コールバック関数名を追加
-      urlParams.append('callback', callbackName);
-      // その他のパラメータを追加
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          urlParams.append(key, String(value));
-        }
-      });
-      
-      // スクリプトタグを作成
-      const script = document.createElement('script');
-      // URLを構築する際に、余分なパスが入らないように注意
-      script.src = `${API_URL}?${urlParams.toString()}`;
-      
-      // エラーハンドリング
-      script.onerror = () => {
-        clearTimeout(timeoutId);
-        document.body.removeChild(script);
-        delete (window as any)[callbackName];
-        reject(new Error('ネットワークエラーが発生しました'));
-      };
-      
-      // タイムアウト設定（10秒）
-      const timeoutId = setTimeout(() => {
-        if (script.parentNode) {
-          document.body.removeChild(script);
-        }
-        delete (window as any)[callbackName];
-        reject(new Error('タイムアウトが発生しました'));
-      }, 10000);
-      
-      // スクリプトをドキュメントに追加して実行
-      document.body.appendChild(script);
-    });
+
+import { KintaiData, KintaiRecord } from '../types';
+
+/* ========= 定数 ========= */
+const FUNC_URL        = '/.netlify/functions/kintai-api';
+
+const TOKEN_KEY       = 'kintai_token';
+const USER_ID_KEY     = 'kintai_user_id';
+const USER_NAME_KEY   = 'kintai_user_name';
+const SHEET_ID_KEY    = 'kintai_spreadsheet_id';
+
+// 月間データをセッションストレージに保存するためのキー
+const MONTHLY_DATA_KEY = 'kintai_monthly_data';
+const MONTHLY_DATA_TIMESTAMP_KEY = 'kintai_monthly_data_timestamp';
+
+/* 開発時の可視化フラグ */
+const DEBUG_MODE = true;
+
+/* ========= 共通型 ========= */
+interface ApiOk<T = unknown> {
+  success?: true;
+  ok?: true;
+  token?: string;
+  userId?: string;
+  userName?: string;
+  spreadsheetId?: string;
+  data?: T;
+  debug?: unknown;
+}
+
+interface ApiErr {
+  success?: false;
+  ok?: false;
+  error?: string;
+  err?: string;
+  debug?: unknown;
+}
+
+type ApiResp<T = unknown> = ApiOk<T> | ApiErr;
+
+/* ========= fetch ラッパ ========= */
+async function callGAS<T = unknown>(
+  action:  string,
+  payload: object = {},
+  withToken = false
+): Promise<ApiOk<T>> {
+
+  const body: Record<string, unknown> = { action, payload };
+  if (withToken) body.token = localStorage.getItem(TOKEN_KEY);
+  if (DEBUG_MODE) body.debug = true;
+
+  const res  = await fetch(FUNC_URL, {
+    method : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body   : JSON.stringify(body)
+  });
+
+  const json = await res.json() as ApiResp<T>;
+
+  console.groupCollapsed(`[GAS] ${action}`);
+  console.log('status:', res.status);
+  console.log('json  :', json);
+  console.groupEnd();
+
+  /* ---------- 型安全にエラーチェック ---------- */
+  const okFlag = (json as ApiOk<T>).success === true || (json as ApiOk<T>).ok === true;
+  if (!okFlag) {
+    const msg =
+      typeof (json as ApiErr).error === 'string' ? (json as ApiErr).error :
+      typeof (json as ApiErr).err   === 'string' ? (json as ApiErr).err   :
+      'API error';
+    throw new Error(msg);
   }
+  return json as ApiOk<T>;
+}
 
-/**
- * ログイン処理
- * @param email ユーザーのメールアドレス
- * @param password ユーザーのパスワード
- * @returns ログイン結果
- */
-export const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+/* ========= login ========= */
+export async function login(
+  email: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
   try {
-    // パラメータオブジェクトを作成
-    const params: Record<string, string> = {
-      action: 'login',
-      email: email,
-      password: password
-    };
-    
-    // JSONP呼び出し
-    const response = await callJSONP(params);
-    
-    if (response.success) {
-      // トークンなどをローカルストレージに保存
-      localStorage.setItem(TOKEN_KEY, response.token);
-      localStorage.setItem(USER_ID_KEY, response.userId);
-      localStorage.setItem(USER_NAME_KEY, response.userName);
-      return { success: true };
-    } else {
-      return { success: false, error: response.error || 'ログインに失敗しました' };
-    }
-  } catch (error) {
-    console.error('Login error:', error);
-    return { success: false, error: error instanceof Error ? error.message : '通信エラーが発生しました' };
+    const r = await callGAS<never>('login', { email, password });
+
+    localStorage.setItem(TOKEN_KEY,     r.token as string);
+    localStorage.setItem(USER_ID_KEY,   r.userId as string);
+    localStorage.setItem(USER_NAME_KEY, r.userName as string);
+    localStorage.setItem(SHEET_ID_KEY,  r.spreadsheetId as string);
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
   }
-};
+}
 
-/**
- * ログアウト処理
- */
-export const logout = async (): Promise<void> => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  
-  if (token) {
-    try {
-      // パラメータオブジェクトを作成
-      const params: Record<string, string> = {
-        action: 'logout',
-        token: token
-      };
-      
-      // JSONP呼び出し
-      await callJSONP(params);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+/* ========= logout ========= */
+export async function logout(): Promise<void> {
+  try {
+    await callGAS('logout', {}, true);
+  } finally {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_ID_KEY);
+    localStorage.removeItem(USER_NAME_KEY);
+    localStorage.removeItem(SHEET_ID_KEY);
+    
+    // 月間データのキャッシュもクリア
+    sessionStorage.removeItem(MONTHLY_DATA_KEY);
+    sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
   }
+}
 
-  // ローカルストレージをクリア
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_ID_KEY);
-  localStorage.removeItem(USER_NAME_KEY);
-};
+/* ========= saveKintai ========= */
+export async function saveKintaiToServer(
+  data: KintaiData
+): Promise<{ success: boolean; error?: string }> {
+  const token         = localStorage.getItem(TOKEN_KEY);
+  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
+  const userId        = localStorage.getItem(USER_ID_KEY);
 
-/**
- * 勤怠データを保存
- * @param kintaiData 勤怠データ
- * @returns 保存結果
- */
-export const saveKintaiToServer = async (kintaiData: KintaiData): Promise<{ success: boolean; error?: string }> => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  
-  if (!token) {
-    return { success: false, error: 'ログインが必要です' };
+  if (!token || !spreadsheetId || !userId) {
+    return { success:false, error:'ログイン情報が不足しています' };
   }
 
   try {
-    // パラメータオブジェクトを作成
-    const params: Record<string, string> = {
-      action: 'saveKintai',
-      token: token,
-      date: kintaiData.date,
-      startTime: kintaiData.startTime,
-      breakTime: kintaiData.breakTime.toString(),
-      endTime: kintaiData.endTime
-    };
+    await callGAS('saveKintai', { ...data, spreadsheetId, userId }, true);
     
-    // 作業場所が指定されている場合は追加
-    if (kintaiData.location) {
-      params.location = kintaiData.location;
-    }
+    // 保存が成功したら月間データのキャッシュをクリア（強制再取得のため）
+    clearMonthlyDataCache();
     
-    // JSONP呼び出し
-    const response = await callJSONP(params);
-
-    if (response.success) {
-      return { success: true };
-    } else {
-      return { success: false, error: response.error || 'データの保存に失敗しました' };
-    }
-  } catch (error) {
-    console.error('Save kintai error:', error);
-    return { success: false, error: error instanceof Error ? error.message : '通信エラーが発生しました' };
+    return { success: true };
+  } catch (e) {
+    return { success:false, error:(e as Error).message };
   }
-};
+}
 
-/**
- * 認証状態を確認
- * @returns 認証状態
- */
-export const isAuthenticated = (): boolean => {
-  return localStorage.getItem(TOKEN_KEY) !== null;
-};
+/* ========= getHistory ========= */
+export async function getKintaiHistory(
+  year: number,
+  month: number
+): Promise<KintaiRecord[]> {
 
-/**
- * ユーザー名を取得
- * @returns ユーザー名
- */
-export const getUserName = (): string | null => {
-  return localStorage.getItem(USER_NAME_KEY);
-};
+  const token         = localStorage.getItem(TOKEN_KEY);
+  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
+  const userId        = localStorage.getItem(USER_ID_KEY);
 
-/**
- * ユーザーIDを取得
- * @returns ユーザーID
- */
-export const getUserId = (): string | null => {
-  return localStorage.getItem(USER_ID_KEY);
-};
+  if (!token || !spreadsheetId || !userId) {
+    throw new Error('認証情報が不足しています');
+  }
+
+  const r = await callGAS<KintaiRecord[]>(
+    'getHistory',
+    { spreadsheetId, userId, year, month },
+    true
+  );
+  return r.data as KintaiRecord[];
+}
+
+/* ========= getMonthlyData ========= */
+export async function getMonthlyData(
+  year: number,
+  month: number, 
+  forceRefresh = false
+): Promise<KintaiRecord[]> {
+  const token         = localStorage.getItem(TOKEN_KEY);
+  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
+  const userId        = localStorage.getItem(USER_ID_KEY);
+
+  if (!token || !spreadsheetId || !userId) {
+    throw new Error('認証情報が不足しています');
+  }
+  
+  // キャッシュキー
+  const cacheKey = `${year}-${month}`;
+  
+  // 既存のキャッシュをチェック（強制更新フラグがOFFの場合）
+  if (!forceRefresh) {
+    const cachedData = getMonthlyDataFromCache(cacheKey);
+    if (cachedData) {
+      console.log(`キャッシュから${year}年${month}月のデータを取得しました`);
+      return cachedData;
+    }
+  }
+  
+  // キャッシュになければサーバーから取得
+  console.log(`サーバーから${year}年${month}月のデータを取得します`);
+  const r = await callGAS<KintaiRecord[]>(
+    'getMonthlyData',
+    { spreadsheetId, userId, year, month },
+    true
+  );
+  
+  // キャッシュに保存
+  saveMonthlyDataToCache(cacheKey, r.data as KintaiRecord[]);
+  
+  return r.data as KintaiRecord[];
+}
+
+/* ========= 月間データキャッシュユーティリティ ========= */
+// キャッシュから月間データを取得
+function getMonthlyDataFromCache(cacheKey: string): KintaiRecord[] | null {
+  try {
+    const cachedDataJson = sessionStorage.getItem(MONTHLY_DATA_KEY);
+    if (!cachedDataJson) return null;
+    
+    const cachedDataMap = JSON.parse(cachedDataJson);
+    const cachedData = cachedDataMap[cacheKey];
+    
+    if (!cachedData) return null;
+    
+    // キャッシュ期限チェック（30分）
+    const timestamp = parseInt(sessionStorage.getItem(MONTHLY_DATA_TIMESTAMP_KEY + '_' + cacheKey) || '0', 10);
+    const now = Date.now();
+    const cacheAge = now - timestamp;
+    
+    // 30分以上経過していたらキャッシュ無効
+    if (cacheAge > 30 * 60 * 1000) {
+      console.log('キャッシュ期限切れです');
+      return null;
+    }
+    
+    return cachedData;
+  } catch (e) {
+    console.error('キャッシュ読み込みエラー:', e);
+    return null;
+  }
+}
+
+// キャッシュに月間データを保存
+function saveMonthlyDataToCache(cacheKey: string, data: KintaiRecord[]): void {
+  try {
+    // 既存のキャッシュを取得
+    const cachedDataJson = sessionStorage.getItem(MONTHLY_DATA_KEY);
+    const cachedDataMap = cachedDataJson ? JSON.parse(cachedDataJson) : {};
+    
+    // 新しいデータを追加
+    cachedDataMap[cacheKey] = data;
+    
+    // キャッシュを保存
+    sessionStorage.setItem(MONTHLY_DATA_KEY, JSON.stringify(cachedDataMap));
+    sessionStorage.setItem(MONTHLY_DATA_TIMESTAMP_KEY + '_' + cacheKey, Date.now().toString());
+    
+    console.log(`${cacheKey}のデータをキャッシュに保存しました`);
+  } catch (e) {
+    console.error('キャッシュ保存エラー:', e);
+  }
+}
+
+// 月間データキャッシュをクリア
+export function clearMonthlyDataCache(): void {
+  try {
+    sessionStorage.removeItem(MONTHLY_DATA_KEY);
+    
+    // タイムスタンプキーもクリア
+    const keys = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith(MONTHLY_DATA_TIMESTAMP_KEY)) {
+        keys.push(key);
+      }
+    }
+    
+    keys.forEach(key => sessionStorage.removeItem(key));
+    
+    console.log('月間データキャッシュをクリアしました');
+  } catch (e) {
+    console.error('キャッシュクリアエラー:', e);
+  }
+}
+
+/* ========= 日付ユーティリティ ========= */
+// 指定した日に入力済みかどうかを確認（月間データを利用）
+export async function isEnteredDate(date: Date): Promise<boolean> {
+  try {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    // 日付文字列を取得（形式: YYYY-MM-DD）
+    const dateStr = formatDateForComparison(date);
+    
+    // 該当月のデータを取得
+    const monthlyData = await getMonthlyData(year, month);
+    
+    // データ内に該当日があるか確認
+    return monthlyData.some(record => record.date === dateStr);
+  } catch (e) {
+    console.error('日付確認エラー:', e);
+    return false;
+  }
+}
+
+// 比較用の日付フォーマット（YYYY-MM-DD）
+function formatDateForComparison(date: Date): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/* ========= ユーティリティ ========= */
+export const isAuthenticated = (): boolean =>
+  localStorage.getItem(TOKEN_KEY) !== null;
+
+export const getUserName = (): string | null =>
+  localStorage.getItem(USER_NAME_KEY);
+
+export const getUserId = (): string | null =>
+  localStorage.getItem(USER_ID_KEY);
+
+export const getSpreadsheetId = (): string | null =>
+  localStorage.getItem(SHEET_ID_KEY);

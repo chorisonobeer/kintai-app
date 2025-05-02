@@ -1,0 +1,16 @@
+# netlify.toml (2025‑04‑21)
+[build]
+  publish   = "build"
+  functions = "netlify/functions"
+
+[dev]
+  command    = "npm run dev"
+  framework  = "vite"
+  targetPort = 5173
+  port       = 8888
+  autoLaunch = true
+
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
