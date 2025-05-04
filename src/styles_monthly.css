@@ -496,3 +496,92 @@
     margin-top: 5px;
     margin-bottom: 10px;
   }
+
+  /* 
+ * styles_monthly.css に追加するスタイル
+ * テーブルレイアウトの改善とレスポンシブ対応
+ */
+
+/* テーブル列幅の最適化 */
+.data-table .col-date {
+    width: 15%;
+    min-width: 85px;
+  }
+  
+  .data-table .col-time {
+    width: 12%;
+    min-width: 70px;
+  }
+  
+  .data-table .col-break {
+    width: 10%;
+    min-width: 60px;
+  }
+  
+  .data-table .col-worktime {
+    width: 13%;
+    min-width: 80px;
+  }
+  
+  .data-table .col-location {
+    width: 15%;
+    min-width: 90px;
+  }
+  
+  /* テーブルの横スクロール対応 */
+  .table-container {
+    overflow-x: auto;
+    margin-bottom: 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .data-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  
+  /* 勤務時間列のスタイル */
+  .col-worktime {
+    font-weight: 500;
+    text-align: center;
+  }
+  
+  /* 小さい画面でのレスポンシブ対応 */
+  @media (max-width: 768px) {
+    .data-table th,
+    .data-table td {
+      padding: 8px 4px;
+      font-size: 0.9rem;
+    }
+    
+    .data-table .col-date {
+      width: 18%;
+      min-width: 80px;
+    }
+    
+    .data-table .col-time,
+    .data-table .col-break,
+    .data-table .col-worktime {
+      width: 14%;
+      min-width: 60px;
+    }
+    
+    .data-table .col-location {
+      width: 12%;
+      min-width: 70px;
+    }
+  }
+  
+  /* 超小型画面対応 */
+  @media (max-width: 480px) {
+    .day-of-week {
+      display: none; /* 曜日を非表示 */
+    }
+    
+    .data-table th,
+    .data-table td {
+      padding: 6px 2px;
+      font-size: 0.8rem;
+    }
+  }

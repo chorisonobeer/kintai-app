@@ -9,7 +9,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import KintaiForm from './components/KintaiForm';
 import MonthlyView from './components/MonthlyView';
 import Login from './components/Login';
-import { isAuthenticated, getUserName } from './utils/apiService';
+import { isAuthenticated } from './utils/apiService';
 import { KintaiProvider } from './contexts/KintaiContext';
 import './styles_monthly.css';
 

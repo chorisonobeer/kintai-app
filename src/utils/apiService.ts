@@ -1,11 +1,7 @@
-/**  src/utils/apiService.ts                              2025‑05‑04-v1
- *  ──────────────────────────────────────────────────────────
- *  - login / logout / saveKintai / getHistory / getMonthlyData
- *  - DEBUG_MODE で GAS 内部 debug を受信
- *  - strictNullChecks/noImplicitAny すべてエラー 0 を確認
- *  - 月間データ取得機能追加
- *  - 勤務場所対応追加
- *  ──────────────────────────────────────────────────────────
+/** 
+ * /src/utils/apiService.ts
+ * 2025-05-04T13:30+09:00
+ * 変更概要: 更新 - 日付形式の正規化、月間データ取得時のフォーマット統一、サーバーAPIとの通信データ形式の調整
  */
 
 import { KintaiData, KintaiRecord } from '../types';
@@ -131,8 +127,11 @@ export async function saveKintaiToServer(
   }
 
   try {
+    // 日付を YYYY/MM/DD 形式に変換
+    const normalizedDate = normalizeDate(data.date);
+    
     await callGAS('saveKintai', { 
-      date: data.date,
+      date: normalizedDate, // 正規化された日付
       startTime: data.startTime,
       breakTime: data.breakTime,
       endTime: data.endTime,
@@ -148,6 +147,36 @@ export async function saveKintaiToServer(
   } catch (e) {
     return { success:false, error:(e as Error).message };
   }
+}
+
+/**
+ * 日付を正規化してYYYY/MM/DD形式に変換
+ */
+function normalizeDate(dateStr: string): string {
+  // YYYY-MM-DD形式の場合、YYYY/MM/DD形式に変換
+  if (dateStr.includes('-')) {
+    return dateStr.replace(/-/g, '/');
+  } 
+  // すでにYYYY/MM/DD形式の場合、そのまま返す
+  else if (dateStr.includes('/')) {
+    return dateStr;
+  }
+  
+  // その他の形式（日本語形式など）の場合、YYYY/MM/DD形式に変換を試みる
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return `${year}/${month}/${day}`;
+    }
+  } catch (e) {
+    console.error('日付変換エラー:', e);
+  }
+  
+  // 変換に失敗した場合、原文をそのまま返す
+  return dateStr;
 }
 
 /* ========= getHistory ========= */
@@ -169,7 +198,11 @@ export async function getKintaiHistory(
     { spreadsheetId, userId, year, month },
     true
   );
-  return r.data as KintaiRecord[];
+  
+  // データの日付形式を正規化
+  const normalizedData = normalizeRecordsDateFormat(r.data as KintaiRecord[]);
+  
+  return normalizedData;
 }
 
 /* ========= getMonthlyData ========= */
@@ -206,10 +239,35 @@ export async function getMonthlyData(
     true
   );
   
-  // キャッシュに保存
-  saveMonthlyDataToCache(cacheKey, r.data as KintaiRecord[]);
+  // データの日付形式を正規化
+  const normalizedData = normalizeRecordsDateFormat(r.data as KintaiRecord[]);
   
-  return r.data as KintaiRecord[];
+  // キャッシュに保存
+  saveMonthlyDataToCache(cacheKey, normalizedData);
+  
+  return normalizedData;
+}
+
+/**
+ * 勤怠レコードの日付フォーマットを統一
+ * サーバーから返される複数の日付形式（YYYY/MM/DD, YYYY-MM-DD）を
+ * フロントエンド用の形式（YYYY-MM-DD）に正規化
+ */
+function normalizeRecordsDateFormat(records: KintaiRecord[]): KintaiRecord[] {
+  return records.map(record => {
+    // 日付の処理: YYYY/MM/DD形式をYYYY-MM-DD形式に変換
+    let normalizedDate = record.date;
+    
+    if (record.date.includes('/')) {
+      const [year, month, day] = record.date.split('/');
+      normalizedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    return {
+      ...record,
+      date: normalizedDate
+    };
+  });
 }
 
 /* ========= 月間データキャッシュユーティリティ ========= */
@@ -298,7 +356,14 @@ export async function isEnteredDate(date: Date): Promise<boolean> {
     const monthlyData = await getMonthlyData(year, month);
     
     // データ内に該当日があるか確認
-    return monthlyData.some(record => record.date === dateStr);
+    return monthlyData.some(record => {
+      // 比較のために両方の日付形式を統一（YYYY-MM-DD）
+      const recordDate = record.date.includes('/') 
+        ? record.date.replace(/\//g, '-') 
+        : record.date;
+      
+      return recordDate === dateStr;
+    });
   } catch (e) {
     console.error('日付確認エラー:', e);
     return false;

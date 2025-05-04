@@ -22,6 +22,10 @@ import { useKintai } from '../contexts/KintaiContext';
 
 // 初期状態
 const initialState: KintaiFormState = {
+  date: getCurrentDate(), // 現在の日付を初期値に
+  startTime: '09:00',     // デフォルトの出勤時刻
+  breakTime: 60,          // デフォルトの休憩時間（分）
+  endTime: '18:00',       // デフォルトの退勤時刻
   isSaved: false,
   isEditing: false,
   touchStartTime: 0

@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from 'react';
+/** 
+ * /src/components/MobileBreakPicker.tsx
+ * 2025-05-04T14:45+09:00
+ * 変更概要: 更新 - 無限更新ループの修正（単一方向のデータフローに変更）
+ */
+import React from 'react';
 import Picker from 'react-mobile-picker';
 import { MobileBreakPickerProps } from '../types';
 
@@ -15,29 +20,15 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
   onChange, 
   disabled = false 
 }) => {
-  // 初期値を直接設定
-  const [pickerValue, setPickerValue] = useState<BreakPickerValue>({
+  // pickerValueは常に親から受け取ったvalueに基づく
+  const pickerValue: BreakPickerValue = {
     breakTime: String(value)
-  });
-
-  // valueが変わった時のみpickerValueを更新
-  useEffect(() => {
-    if (String(value) !== pickerValue.breakTime) {
-      setPickerValue({ breakTime: String(value) });
-    }
-  }, [value]);
-
-  // pickerValueが変わったら親コンポーネントに通知
-  useEffect(() => {
-    const newBreakTime = Number(pickerValue.breakTime);
-    if (newBreakTime !== value) {
-      onChange(newBreakTime);
-    }
-  }, [pickerValue.breakTime, onChange]); // valueを依存配列から除外
+  };
 
   // 型アサーションを使用して型の互換性を確保
   const handlePickerChange = (newValue: any) => {
-    setPickerValue(newValue as BreakPickerValue);
+    const newBreakTime = Number((newValue as BreakPickerValue).breakTime);
+    onChange(newBreakTime);
   };
 
   const formatBreakTime = (minutes: number): string => {
