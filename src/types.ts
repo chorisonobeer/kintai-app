@@ -5,7 +5,7 @@
 export type KintaiData = {
     date: string;        // yyyy-MM-dd
     startTime: string;   // HH:mm
-    breakTime: string;   // HH:mm
+    breakTime: number;   // 分数で保持
     endTime: string;     // HH:mm
     location?: string;
   };

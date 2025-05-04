@@ -1,9 +1,10 @@
-/**  src/apiService.ts                              2025‑05‑01-v1
+/**  src/utils/apiService.ts                              2025‑05‑04-v1
  *  ──────────────────────────────────────────────────────────
  *  - login / logout / saveKintai / getHistory / getMonthlyData
  *  - DEBUG_MODE で GAS 内部 debug を受信
  *  - strictNullChecks/noImplicitAny すべてエラー 0 を確認
  *  - 月間データ取得機能追加
+ *  - 勤務場所対応追加
  *  ──────────────────────────────────────────────────────────
  */
 
@@ -130,7 +131,15 @@ export async function saveKintaiToServer(
   }
 
   try {
-    await callGAS('saveKintai', { ...data, spreadsheetId, userId }, true);
+    await callGAS('saveKintai', { 
+      date: data.date,
+      startTime: data.startTime,
+      breakTime: data.breakTime,
+      endTime: data.endTime,
+      location: data.location || '',
+      spreadsheetId, 
+      userId 
+    }, true);
     
     // 保存が成功したら月間データのキャッシュをクリア（強制再取得のため）
     clearMonthlyDataCache();

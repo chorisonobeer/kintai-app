@@ -1,0 +1,498 @@
+/**
+ * /src/styles_monthly.css
+ * 2025-05-04T12:00+09:00
+ * 変更概要: 更新 - テーブル形式の月間ビュー用のスタイルと日次入力画面のレイアウト改善
+ */
+
+/* 基本設定 */
+:root {
+    --primary-color: #3f51b5;
+    --primary-light: #e8eaf6;
+    --primary-dark: #303f9f;
+    --accent-color: #ff4081;
+    --text-color: #333;
+    --text-secondary: #777;
+    --border-color: #e0e0e0;
+    --background-gray: #f5f5f5;
+    --success-color: #4caf50;
+    --error-color: #f44336;
+    --weekend-light: #f5f5ff;
+    --sunday-light: #fff0f0;
+    --header-height: 60px;
+    --footer-height: 60px;
+    --box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --button-min-height: 44px;
+    --button-min-width: 44px;
+  }
+  
+  /* 月間ビューと日次入力の共通コンテナ */
+  .monthly-view, .kintai-form-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 100%;
+    background-color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  
+  /* ヘッダー */
+  .monthly-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 12px;
+    position: relative;
+    box-shadow: var(--box-shadow);
+    z-index: 10;
+  }
+  
+  /* ヘッダーレイアウト調整 */
+  .monthly-header .header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+  
+  .monthly-header .user-name-container {
+    flex: 1;
+    text-align: left;
+    font-size: 0.85rem;
+  }
+  
+  .monthly-header h1 {
+    flex: 2;
+    margin: 0;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 500;
+  }
+  
+  .monthly-header .header-actions {
+    flex: 1;
+    text-align: right;
+  }
+  
+  .header-logout-button {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  
+  .header-logout-button:active {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* ナビゲーションタブ */
+  .nav-tabs {
+    display: flex;
+    background-color: var(--primary-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .tab-button {
+    flex: 1;
+    color: rgba(255, 255, 255, 0.8);
+    background: none;
+    border: none;
+    padding: 14px 8px;
+    font-size: 1rem;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: var(--button-min-height);
+  }
+  
+  .tab-button.active {
+    color: white;
+    font-weight: bold;
+  }
+  
+  .tab-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: white;
+  }
+  
+  /* 月選択部分 */
+  .month-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background-color: white;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    z-index: 5;
+  }
+  
+  .month-selector {
+    display: flex;
+    align-items: center;
+  }
+  
+  .month-selector h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--text-color);
+    min-width: 120px;
+    text-align: center;
+  }
+  
+  .month-nav-button {
+    background: none;
+    border: none;
+    border-radius: 50%;
+    width: var(--button-min-width);
+    height: var(--button-min-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: background-color 0.3s;
+    position: relative;
+  }
+  
+  .month-nav-button:active {
+    background-color: var(--background-gray);
+  }
+  
+  .refresh-button {
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    min-height: var(--button-min-height);
+    min-width: 80px;
+  }
+  
+  .refresh-button:active {
+    background-color: var(--primary-color);
+    color: white;
+  }
+  
+  .refresh-button.refreshing {
+    background-color: var(--primary-color);
+    color: white;
+    opacity: 0.8;
+  }
+  
+  /* サマリー情報 */
+  .monthly-summary {
+    background-color: var(--primary-light);
+    padding: 12px;
+    display: flex;
+    justify-content: space-around;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .summary-value {
+    font-weight: bold;
+    color: var(--primary-dark);
+  }
+  
+  /* テーブル */
+  .table-container {
+    padding: 0 10px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #ccc;
+    font-size: 0.9rem;
+  }
+  
+  .data-table th,
+  .data-table td {
+    border: 1px solid #ccc;
+    padding: 10px 5px;
+    text-align: center;
+  }
+  
+  .data-table th {
+    background-color: var(--background-gray);
+    font-weight: 500;
+    color: var(--text-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  
+  .col-date {
+    text-align: left;
+    width: 25%;
+  }
+  
+  .col-time {
+    width: 20%;
+  }
+  
+  .col-break {
+    width: 15%;
+  }
+  
+  .col-work {
+    width: 20%;
+  }
+  
+  .day-saturday {
+    background-color: var(--weekend-light);
+  }
+  
+  .day-sunday {
+    background-color: var(--sunday-light);
+  }
+  
+  .day-of-week {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+  
+  .no-data-message {
+    padding: 30px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+  
+  /* 勤務場所選択スタイル */
+  .form-group {
+    margin-bottom: 15px;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #555;
+    font-size: 0.9rem;
+  }
+  
+  .location-select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: white;
+    font-size: 1rem;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+  }
+  
+  /* 月間ビューボタン（日次入力画面内） */
+  .monthly-view-button-container {
+    margin-top: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  
+  .monthly-view-button {
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    min-height: var(--button-min-height);
+  }
+  
+  .monthly-view-button:active {
+    background-color: var(--primary-color);
+    color: white;
+  }
+  
+  /* ローディング表示 */
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--primary-light);
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .loading-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+  
+  /* メディアクエリ - 小さい画面用の最適化 */
+  @media (max-width: 340px) {
+    .col-date {
+      width: 28%;
+    }
+    
+    .col-time {
+      width: 18%;
+    }
+    
+    .col-break {
+      width: 18%;
+    }
+    
+    .col-work {
+      width: 18%;
+    }
+    
+    .month-selector h2 {
+      font-size: 1rem;
+      min-width: 100px;
+    }
+    
+    .data-table th,
+    .data-table td {
+      padding: 8px 3px;
+      font-size: 0.8rem;
+    }
+  }
+  
+  /* 日次入力フォーム追加スタイル */
+  .kintai-form {
+    padding: 15px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .disabled-form {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  
+  .disabled-message {
+    background-color: #ffeaea;
+    color: #d32f2f;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  
+  .message-box {
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  
+  .success-box {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+  
+  .error-box {
+    background-color: #ffeaea;
+    color: #d32f2f;
+  }
+  
+  .picker-container {
+    margin-bottom: 20px;
+  }
+  
+  .button-container {
+    margin-top: 20px;
+    text-align: center;
+  }
+  
+  .btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 12px 30px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    min-height: var(--button-min-height);
+  }
+  
+  .btn:active, .btn:hover {
+    background-color: var(--primary-dark);
+  }
+  
+  .btn:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+  
+  .btn-saved {
+    background-color: var(--success-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 30px;
+  }
+  
+  .btn-edit {
+    background-color: var(--primary-color);
+  }
+  
+  .btn-pressing {
+    transform: scale(0.98);
+  }
+  
+  .saved-message {
+    font-weight: bold;
+    font-size: 1rem;
+  }
+  
+  .hint-text {
+    font-size: 0.8rem;
+    opacity: 0.9;
+    margin-top: 4px;
+  }
+  
+  .error-message {
+    color: #d32f2f;
+    font-size: 0.8rem;
+    margin-top: 5px;
+    margin-bottom: 10px;
+  }

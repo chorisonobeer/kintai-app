@@ -1,3 +1,8 @@
+/**
+ * /src/types/index.ts
+ * 2025-05-04T12:10+09:00
+ * 変更概要: 更新 - KintaiFormState にフォームデータプロパティを追加
+ */
 export interface KintaiData {
     date: string;
     startTime: string;
@@ -34,6 +39,10 @@ export interface KintaiData {
   
   // 勤怠フォームの状態
   export interface KintaiFormState {
+    date: string;          // 現在選択中の日付
+    startTime: string;     // 出勤時刻
+    breakTime: number;     // 休憩時間（分）
+    endTime: string;       // 退勤時刻
     isSaved: boolean;      // 現在の日付が保存済みかどうか
     isEditing: boolean;    // 編集モード中かどうか
     touchStartTime: number; // 長押し開始時間

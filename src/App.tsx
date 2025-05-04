@@ -1,7 +1,17 @@
+/**
+ * /src/App.tsx
+ * 2025-05-04T12:20+09:00
+ * 変更概要: 更新 - 未使用の getUserName インポートを削除
+ */
+
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import KintaiForm from './components/KintaiForm';
+import MonthlyView from './components/MonthlyView';
 import Login from './components/Login';
-import { isAuthenticated } from './utils/apiService';
+import { isAuthenticated, getUserName } from './utils/apiService';
+import { KintaiProvider } from './contexts/KintaiContext';
+import './styles_monthly.css';
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -28,10 +38,7 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
       <div className="container">
-        <header className="header">
-          <h1>勤怠管理</h1>
-        </header>
-        <div className="kintai-form" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="loading-center">
           <div>読み込み中...</div>
         </div>
       </div>
@@ -40,11 +47,17 @@ const App: React.FC = () => {
 
   return (
     <div className="container">
-      <header className="header">
-        <h1>勤怠管理</h1>
-      </header>
+      {/* ヘッダーはここで出力しない - 各コンポーネントに任せる */}
       {isLoggedIn ? (
-        <KintaiForm onLogout={handleLogout} />
+        <KintaiProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<KintaiForm onLogout={handleLogout} />} />
+              <Route path="/monthly" element={<MonthlyView onLogout={handleLogout} />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </KintaiProvider>
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
       )}
