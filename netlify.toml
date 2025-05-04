@@ -1,6 +1,6 @@
 # netlify.toml (2025‑04‑21)
 [build]
-  publish   = "build"
+  publish   = "dist"
   functions = "netlify/functions"
 
 [dev]
