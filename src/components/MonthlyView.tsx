@@ -1,14 +1,15 @@
 /** 
  * /src/components/MonthlyView.tsx
- * 2025-05-04T16:30+09:00
- * 変更概要: 更新 - 勤務時間表示の正規化(時:分形式)、総勤務時間計算の修正、複数データ形式対応の強化
+ * 2025-05-04T23:00+09:00
+ * 変更概要: 更新 - onLogoutプロパティ型定義の修正、日付表示形式の正規化
  */
 import React, { useState } from 'react';
 import { useKintai } from '../contexts/KintaiContext';
 import { getUserName, logout } from '../utils/apiService';
 
+// 明示的なプロパティ型定義
 interface MonthlyViewProps {
-  onLogout?: () => void;
+  onLogout?: () => void; // 省略可能な関数プロパティ
 }
 
 const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
@@ -278,8 +279,13 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
   // ログアウト処理
   const handleLogout = async () => {
     if (onLogout) {
+      // 親コンポーネントからのonLogout関数が渡された場合はそれを実行
       await logout();
       onLogout();
+    } else {
+      // 渡されていない場合はデフォルトの動作
+      await logout();
+      window.location.href = '/login';
     }
   };
 

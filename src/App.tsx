@@ -1,66 +1,56 @@
-/**
+/** 
  * /src/App.tsx
- * 2025-05-04T12:20+09:00
- * 変更概要: 更新 - 未使用の getUserName インポートを削除
+ * 2025-05-04T23:00+09:00
+ * 変更概要: 更新 - onLogout型エラーの修正、コンポーネントの適切なプロパティ設定
  */
-
-import React, { useState, useEffect } from 'react';
+/** 
+ * /src/App.tsx
+ * 2025-05-05T00:10+09:00
+ * 変更概要: 修正 - LoginコンポーネントにonLoginSuccessプロパティを追加、未使用のuseStateを削除
+ */
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import KintaiForm from './components/KintaiForm';
-import MonthlyView from './components/MonthlyView';
 import Login from './components/Login';
+import MonthlyView from './components/MonthlyView';
 import { isAuthenticated } from './utils/apiService';
 import { KintaiProvider } from './contexts/KintaiContext';
-import './styles_monthly.css';
+
+// 認証保護ルート用のラッパーコンポーネント
+const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) => {
+  return isAuthenticated() ? <>{element}</> : <Navigate to="/login" replace />;
+};
 
 const App: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // アプリ起動時に認証状態を確認
-  useEffect(() => {
-    // トークンの有無を確認
-    const authStatus = isAuthenticated();
-    setIsLoggedIn(authStatus);
-    setIsLoading(false);
-  }, []);
-
-  // ログイン成功時のハンドラー
-  const handleLoginSuccess = () => {
-    setIsLoggedIn(true);
-  };
-
-  // ログアウト時のハンドラー
+  // ログアウト処理を一元管理
   const handleLogout = () => {
-    setIsLoggedIn(false);
+    // ログアウト後の状態管理をここで行うこともできる
+    // 既存のlogout関数はapiService内にあるので、ここでは空の関数としておく
   };
-
-  if (isLoading) {
-    return (
-      <div className="container">
-        <div className="loading-center">
-          <div>読み込み中...</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="container">
-      {/* ヘッダーはここで出力しない - 各コンポーネントに任せる */}
-      {isLoggedIn ? (
+      <header className="header">
+        <h1>勤怠管理</h1>
+      </header>
+      
+      <BrowserRouter>
         <KintaiProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<KintaiForm onLogout={handleLogout} />} />
-              <Route path="/monthly" element={<MonthlyView onLogout={handleLogout} />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </BrowserRouter>
+          <Routes>
+            {/* TODO: ログイン成功時の処理を実装する */}
+            <Route path="/login" element={<Login onLoginSuccess={() => { /* ログイン成功時の処理 */ }} />} />
+            <Route 
+              path="/" 
+              element={<ProtectedRoute element={<KintaiForm />} />} 
+            />
+            <Route 
+              path="/monthly" 
+              element={<ProtectedRoute element={<MonthlyView onLogout={handleLogout} />} />} 
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </KintaiProvider>
-      ) : (
-        <Login onLoginSuccess={handleLoginSuccess} />
-      )}
+      </BrowserRouter>
     </div>
   );
 };

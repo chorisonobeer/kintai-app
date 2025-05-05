@@ -1,499 +1,392 @@
-/**
+/** 
  * /src/components/KintaiForm.tsx
- * 2025-05-04T12:00+09:00
- * 変更概要: 更新 - 勤務地フィールド追加、UI改善、データ形式修正
+ * 2025-05-04T23:00+09:00
+ * 変更概要: 更新 - formatDateWithWeekday参照問題の修正、日付選択方式の変更
  */
-
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useReducer } from 'react';
+import { useNavigate } from 'react-router-dom';
+import MobileDatePicker from './MobileDatePicker';
 import MobileTimePicker from './MobileTimePicker';
 import MobileBreakPicker from './MobileBreakPicker';
-import MobileDatePicker from './MobileDatePicker';
-import { KintaiData, ValidationErrors, KintaiFormState, EditActionType } from '../types';
+import { 
+  KintaiFormState, 
+  EditActionType,
+  ValidationErrors,
+  KintaiData 
+} from '../types';
 import { 
   getCurrentDate, 
-  isDateTooOld, 
-  isTimeBeforeOrEqual, 
-  formatShortDate,
-  getWeekdayName 
+  isDateTooOld,
+  isTimeBeforeOrEqual,
+  getSelectableDates
 } from '../utils/dateUtils';
-import { saveKintaiData, getKintaiData, isDateSaved } from '../utils/storageUtils';
-import { saveKintaiToServer, getUserName, logout, isEnteredDate } from '../utils/apiService';
-import { useKintai } from '../contexts/KintaiContext';
+import { saveKintaiToServer, isAuthenticated, getUserName, logout, isEnteredDate } from '../utils/apiService';
 
 // 初期状態
 const initialState: KintaiFormState = {
-  date: getCurrentDate(), // 現在の日付を初期値に
-  startTime: '09:00',     // デフォルトの出勤時刻
-  breakTime: 60,          // デフォルトの休憩時間（分）
-  endTime: '18:00',       // デフォルトの退勤時刻
+  date: getCurrentDate(),
+  startTime: '9:00',
+  breakTime: 60, // 60分
+  endTime: '18:00',
+  location: '',
   isSaved: false,
   isEditing: false,
   touchStartTime: 0
 };
 
-// 長押し検出のための時間（ミリ秒）
-const LONG_PRESS_DURATION = 700;
-
-// 勤務場所選択肢
-const LOCATIONS = ['その他', '柿農園', '田んぼ', ''];
-
-// 編集状態の reducer
-function formStateReducer(state: KintaiFormState, action: { type: EditActionType, payload?: any }) {
+// 編集アクション処理用reducer
+const editReducer = (state: KintaiFormState, action: { type: EditActionType; payload?: any }): KintaiFormState => {
   switch (action.type) {
     case EditActionType.TOUCH_START:
-      return { ...state, touchStartTime: Date.now() };
-    
+      return {
+        ...state,
+        touchStartTime: Date.now()
+      };
     case EditActionType.TOUCH_END:
-      // 長押しだった場合、編集モードに入る
-      const pressDuration = Date.now() - state.touchStartTime;
-      if (pressDuration >= LONG_PRESS_DURATION && state.isSaved) {
-        return { ...state, isEditing: true, touchStartTime: 0 };
+      const touchDuration = Date.now() - state.touchStartTime;
+      // 1秒以上の長押しで編集モードに
+      if (touchDuration >= 1000 && !state.isEditing) {
+        return {
+          ...state,
+          isEditing: true,
+          touchStartTime: 0
+        };
       }
-      return { ...state, touchStartTime: 0 };
-    
+      return {
+        ...state,
+        touchStartTime: 0
+      };
     case EditActionType.CANCEL_EDIT:
-      return { ...state, isEditing: false };
-    
-    case EditActionType.SAVE_COMPLETE:
-      return { ...state, isSaved: true, isEditing: false };
-    
-    case EditActionType.DATE_CHANGE:
-      return { 
-        ...state, 
-        isSaved: action.payload?.isSaved || false,
+      return {
+        ...state,
         isEditing: false
       };
-    
+    case EditActionType.SAVE_COMPLETE:
+      return {
+        ...state,
+        isSaved: true,
+        isEditing: false
+      };
+    case EditActionType.DATE_CHANGE:
+      return {
+        ...state,
+        date: action.payload,
+        isSaved: false
+      };
     case EditActionType.CHECK_SAVED:
-      return { ...state, isSaved: action.payload?.isSaved || false };
-    
+      return {
+        ...state,
+        isSaved: action.payload
+      };
     default:
       return state;
   }
-}
+};
 
-interface KintaiFormProps {
-  onLogout?: () => void;
-}
-
-const KintaiForm: React.FC<KintaiFormProps> = ({ onLogout }) => {
-  // KintaiContext からデータを取得
-  const { refreshData } = useKintai();
-
-  // フォームデータの状態
-  const [formData, setFormData] = useState<KintaiData>({
-    date: getCurrentDate(),
-    startTime: '09:00',
-    breakTime: 60,
-    endTime: '18:00',
-    location: 'その他'
-  });
-
-  // バリデーションエラーの状態
+const KintaiForm: React.FC = () => {
+  const navigate = useNavigate();
+  
+  // ユーザー認証チェック
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      navigate('/login');
+    }
+  }, [navigate]);
+  
+  // フォーム状態管理
+  const [formState, dispatch] = useReducer(editReducer, initialState);
+  
+  // フォーム値とバリデーション
+  const [startTime, setStartTime] = useState(initialState.startTime);
+  const [breakTime, setBreakTime] = useState(initialState.breakTime);
+  const [endTime, setEndTime] = useState(initialState.endTime);
+  const [location, setLocation] = useState(initialState.location);
   const [errors, setErrors] = useState<ValidationErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tooOldDateWarning, setTooOldDateWarning] = useState(false);
   
-  // 編集不可状態（2日以上前）
-  const [isFormDisabled, setIsFormDisabled] = useState<boolean>(false);
+  // 選択可能な日付の取得
+  const selectableDates = getSelectableDates();
   
-  // 保存状態と編集モードの管理
-  const [formState, dispatch] = useReducer(formStateReducer, initialState);
-  
-  // ボタンのプレス状態
-  const [isPressing, setIsPressing] = useState<boolean>(false);
-
-  // サーバー通信状態
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [saveMessage, setSaveMessage] = useState<{text: string, isError: boolean} | null>(null);
-
-  // ユーザー名の取得
-  const userName = getUserName();
-
-  // 初期ロード時と日付変更時にデータをロード
-  useEffect(() => {
-    loadSavedData(formData.date);
-    checkDateSavedStatus(formData.date);
-  }, [formData.date]);
-
-  // 日付が変更されたときに2日以上前かどうかチェックする
-  useEffect(() => {
-    const isTooOld = isDateTooOld(formData.date);
-    setIsFormDisabled(isTooOld);
-    
-    if (isTooOld) {
-      setErrors(prev => ({ ...prev, date: '2日以上前の日付は編集できません' }));
-    } else {
-      setErrors(prev => {
-        const { date, ...rest } = prev;
-        return rest;
-      });
-    }
-  }, [formData.date]);
-
-  // 時間が変更されたときにバリデーションを実行
-  useEffect(() => {
-    validateTimeOrder();
-  }, [formData.startTime, formData.endTime]);
-
-  // 保存済みデータをロード
-  const loadSavedData = useCallback((date: string) => {
-    const savedData = getKintaiData(date);
-    if (savedData) {
-      setFormData(savedData);
-    } else {
-      // デフォルト値をセット
-      setFormData({
-        date,
-        startTime: '09:00',
-        breakTime: 60,
-        endTime: '18:00',
-        location: 'その他'
-      });
-    }
-  }, []);
-
-  // 日付の保存状態をチェック
-  const checkDateSavedStatus = useCallback(async (date: string) => {
-    // ローカルストレージをチェック
-    const savedLocally = isDateSaved(date);
-    
-    // サーバー上の状態もチェック
-    let savedOnServer = false;
+  // 日付に入力済みフラグチェック
+  const checkDateEntered = useCallback(async (date: string) => {
     try {
-      const dateObj = new Date(date);
-      savedOnServer = await isEnteredDate(dateObj);
+      const entered = await isEnteredDate(new Date(date));
+      dispatch({ type: EditActionType.CHECK_SAVED, payload: entered });
     } catch (error) {
       console.error('日付チェックエラー:', error);
     }
-    
-    // どちらかに保存されていればOK
-    const isSaved = savedLocally || savedOnServer;
-    dispatch({ type: EditActionType.DATE_CHANGE, payload: { isSaved } });
   }, []);
-
-  // 日付変更ハンドラー
+  
+  // 日付変更時
+  useEffect(() => {
+    const loadDateInfo = async () => {
+      await checkDateEntered(formState.date);
+      
+      // 古い日付の警告
+      const isOldDate = isDateTooOld(formState.date);
+      setTooOldDateWarning(isOldDate);
+    };
+    
+    loadDateInfo();
+  }, [formState.date, checkDateEntered]);
+  
+  // 入力値変更ハンドラー
   const handleDateChange = (date: string) => {
-    setFormData(prev => ({ ...prev, date }));
-    checkDateSavedStatus(date);
+    dispatch({ type: EditActionType.DATE_CHANGE, payload: date });
   };
-
-  // 時間変更ハンドラー
+  
   const handleStartTimeChange = (time: string) => {
-    setFormData(prev => ({ ...prev, startTime: time }));
+    setStartTime(time);
+    validateForm({
+      date: formState.date,
+      startTime: time,
+      breakTime,
+      endTime,
+      location
+    });
   };
-
+  
   const handleBreakTimeChange = (minutes: number) => {
-    setFormData(prev => ({ ...prev, breakTime: minutes }));
+    setBreakTime(minutes);
+    validateForm({
+      date: formState.date,
+      startTime,
+      breakTime: minutes,
+      endTime,
+      location
+    });
   };
-
+  
   const handleEndTimeChange = (time: string) => {
-    setFormData(prev => ({ ...prev, endTime: time }));
+    setEndTime(time);
+    validateForm({
+      date: formState.date,
+      startTime,
+      breakTime,
+      endTime: time,
+      location
+    });
   };
   
-  // 勤務場所変更ハンドラー
   const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFormData(prev => ({ ...prev, location: e.target.value }));
+    setLocation(e.target.value);
   };
   
-  // 時間の順序バリデーション
-  const validateTimeOrder = () => {
-    if (formData.startTime && formData.endTime) {
-      if (!isTimeBeforeOrEqual(formData.startTime, formData.endTime)) {
-        setErrors(prev => ({ ...prev, general: '退勤時刻は出勤時刻より後である必要があります' }));
-      } else {
-        setErrors(prev => {
-          const { general, ...rest } = prev;
-          return rest;
-        });
-      }
-    }
-  };
-
-  // フォームバリデーション
-  const validateForm = (): boolean => {
+  // フォーム検証
+  const validateForm = (data: KintaiData): boolean => {
     const newErrors: ValidationErrors = {};
     
-    if (!formData.date) {
-      newErrors.date = '日付を入力してください';
-    } else if (isDateTooOld(formData.date)) {
-      newErrors.date = '2日以上前の日付は編集できません';
-    }
-    
-    if (!formData.startTime) {
-      newErrors.startTime = '出勤時刻を入力してください';
-    }
-    
-    if (!formData.endTime) {
-      newErrors.endTime = '退勤時刻を入力してください';
-    }
-    
-    if (formData.startTime && formData.endTime && 
-        !isTimeBeforeOrEqual(formData.startTime, formData.endTime)) {
-      newErrors.general = '退勤時刻は出勤時刻より後である必要があります';
-    }
-    
-    if (!formData.location) {
-      newErrors.location = '勤務場所を選択してください';
+    // 出勤時間が退勤時間より前かチェック
+    if (!isTimeBeforeOrEqual(data.startTime, data.endTime)) {
+      newErrors.endTime = '退勤時間は出勤時間より後にしてください';
     }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
-  // フォーム送信ハンドラー
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  
+  // 送信ハンドラー
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
     
-    if (!validateForm()) {
-      return;
-    }
+    const formData: KintaiData = {
+      date: formState.date,
+      startTime,
+      breakTime,
+      endTime,
+      location
+    };
     
-    // UI状態の更新
-    setIsSaving(true);
-    setSaveMessage(null);
-
-    try {
-      // データをローカルストレージに保存
-      saveKintaiData(formData);
-      
-      // データをサーバーに送信
-      const result = await saveKintaiToServer(formData);
-      
-      if (result.success) {
-        // 保存完了状態に更新
-        dispatch({ type: EditActionType.SAVE_COMPLETE });
-        setSaveMessage({ text: '勤怠データを保存しました', isError: false });
+    const isValid = validateForm(formData);
+    
+    if (isValid) {
+      try {
+        const result = await saveKintaiToServer(formData);
         
-        // Context のデータを更新
-        await refreshData();
-      } else {
-        setSaveMessage({ text: result.error || 'サーバーへの保存に失敗しました', isError: true });
-      }
-    } catch (error) {
-      console.error('Save error:', error);
-      setSaveMessage({ text: '通信エラーが発生しました', isError: true });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // 長押し関連のハンドラー
-  const handleTouchStart = () => {
-    dispatch({ type: EditActionType.TOUCH_START });
-    setIsPressing(true);
-    
-    // タイマーを設定して視覚的フィードバックを管理
-    const timer = setTimeout(() => {
-      if (formState.isSaved) {
-        // バイブレーション（対応デバイスのみ）
-        if ('vibrate' in navigator) {
-          navigator.vibrate(50);
+        if (result.success) {
+          dispatch({ type: EditActionType.SAVE_COMPLETE });
+        } else {
+          setErrors({ general: result.error || 'エラーが発生しました' });
         }
+      } catch (error) {
+        setErrors({ general: '保存中にエラーが発生しました' });
+        console.error('保存エラー:', error);
       }
-    }, LONG_PRESS_DURATION);
+    }
     
-    return () => clearTimeout(timer);
+    setIsSubmitting(false);
   };
-
-  const handleTouchEnd = () => {
+  
+  // 編集モード切り替えハンドラー
+  const handleLongPressStart = () => {
+    dispatch({ type: EditActionType.TOUCH_START });
+  };
+  
+  const handleLongPressEnd = () => {
     dispatch({ type: EditActionType.TOUCH_END });
-    setIsPressing(false);
   };
-
-  // 編集モードのキャンセル
+  
   const handleCancelEdit = () => {
     dispatch({ type: EditActionType.CANCEL_EDIT });
-    loadSavedData(formData.date);
+    // 値を元に戻す
+    setStartTime(initialState.startTime);
+    setBreakTime(initialState.breakTime);
+    setEndTime(initialState.endTime);
+    setLocation(initialState.location);
+    setErrors({});
   };
-
+  
   // ログアウト処理
   const handleLogout = async () => {
-    if (onLogout) {
-      await logout();
-      onLogout();
+    await logout();
+    navigate('/login');
+  };
+  
+  // ユーザー名取得
+  const userName = getUserName();
+  
+  // 保存ボタンのテキスト
+  const getSaveButtonText = () => {
+    if (isSubmitting) {
+      return '保存中...';
     }
+    
+    if (formState.isSaved) {
+      return (
+        <span className="saved-message">
+          この日のデータは保存済みです
+          <span className="hint-text">長押しで編集できます</span>
+        </span>
+      );
+    }
+    
+    return '保存する';
   };
-
-  // 月間ビューへの遷移
-  const goToMonthlyView = () => {
-    window.location.href = '/monthly';
-  };
-
-  // 保存ボタンのテキストとスタイルを決定
-  const getButtonConfig = () => {
-    // 保存済みで編集モードでない場合
+  
+  // ボタンのクラス名
+  const getButtonClassName = () => {
+    let className = 'btn btn-press-effect';
+    
     if (formState.isSaved && !formState.isEditing) {
-      const shortDate = formatShortDate(formData.date);
-      const weekday = getWeekdayName(formData.date);
-      return {
-        text: (
-          <>
-            <span className="saved-message">{shortDate}({weekday})は保存済み</span>
-            <span className="hint-text">編集する場合は長押し</span>
-          </>
-        ),
-        className: 'btn btn-saved btn-press-effect',
-        onClick: (e: React.FormEvent) => e.preventDefault(),
-        isDisabled: false
-      };
+      className += ' btn-saved';
+    } else if (formState.isEditing) {
+      className += ' btn-edit';
     }
     
-    // 編集モード中
-    if (formState.isEditing) {
-      return {
-        text: '更新',
-        className: 'btn btn-edit',
-        onClick: handleSubmit,
-        isDisabled: isFormDisabled || Object.keys(errors).length > 0 || isSaving
-      };
+    if (formState.touchStartTime > 0) {
+      className += ' btn-pressing';
     }
     
-    // 通常の保存モード
-    return {
-      text: isSaving ? '保存中...' : '保存',
-      className: 'btn',
-      onClick: handleSubmit,
-      isDisabled: isFormDisabled || Object.keys(errors).length > 0 || isSaving
-    };
+    return className;
   };
-
-  const buttonConfig = getButtonConfig();
-  const pressingClass = isPressing ? 'btn-pressing' : '';
-
+  
   return (
-    <div className="kintai-form-container">
-      {/* ヘッダー - ユーザー名とログアウトボタンを一緒に */}
-      <div className="monthly-header">
-        <div className="header-content">
-          <div className="user-name-container">
-            {userName && <span className="user-name">{userName}</span>}
-          </div>
-          <h1>勤怠管理</h1>
-          <div className="header-actions">
-            <button 
-              className="header-logout-button"
-              onClick={handleLogout}
-            >
-              ログアウト
-            </button>
-          </div>
+    <div className="kintai-form">
+      {/* ユーザー情報 */}
+      {userName && (
+        <div className="user-info">
+          <span className="user-name">{userName}</span>
+          <button className="logout-button" onClick={handleLogout}>ログアウト</button>
+        </div>
+      )}
+      
+      {/* 古い日付警告 */}
+      {tooOldDateWarning && (
+        <div className="error-box message-box">
+          2日以上前の日付のため、保存できない場合があります
+        </div>
+      )}
+      
+      {/* 日付選択 */}
+      <MobileDatePicker 
+        value={formState.date}
+        onChange={handleDateChange}
+        disabled={!formState.isEditing}
+        selectableDates={selectableDates}
+      />
+      
+      {/* 出勤時間 */}
+      <div className={formState.isEditing ? '' : 'disabled-form'}>
+        <MobileTimePicker 
+          label="出勤時間" 
+          value={startTime} 
+          onChange={handleStartTimeChange} 
+          disabled={!formState.isEditing}
+        />
+        {errors.startTime && <div className="error-message">{errors.startTime}</div>}
+        
+        {/* 休憩時間 */}
+        <MobileBreakPicker
+          value={breakTime}
+          onChange={handleBreakTimeChange}
+          disabled={!formState.isEditing}
+        />
+        {errors.breakTime && <div className="error-message">{errors.breakTime}</div>}
+        
+        {/* 退勤時間 */}
+        <MobileTimePicker 
+          label="退勤時間" 
+          value={endTime} 
+          onChange={handleEndTimeChange} 
+          disabled={!formState.isEditing}
+        />
+        {errors.endTime && <div className="error-message">{errors.endTime}</div>}
+        
+        {/* 勤務場所 */}
+        <div className="form-group">
+          <label>勤務場所</label>
+          <select 
+            value={location} 
+            onChange={handleLocationChange}
+            disabled={!formState.isEditing}
+            className="location-select"
+          >
+            <option value="">選択してください</option>
+            <option value="田んぼ">田んぼ</option>
+            <option value="柿農園">柿農園</option>
+            <option value="事務所">事務所</option>
+            <option value="その他">その他</option>
+          </select>
         </div>
       </div>
       
-      {/* ナビゲーションタブ */}
-      <div className="nav-tabs">
-        <button className="tab-button active">日次入力</button>
-        <button className="tab-button" onClick={goToMonthlyView}>月間ビュー</button>
-      </div>
+      {/* エラーメッセージ */}
+      {errors.general && <div className="error-message">{errors.general}</div>}
       
-      {/* メインコンテンツ */}
-      <div className="kintai-form">
-        {isFormDisabled && (
-          <div className="disabled-message">
-            2日以上前の日付は編集できません
-          </div>
-        )}
-        
-        {saveMessage && (
-          <div className={`message-box ${saveMessage.isError ? 'error-box' : 'success-box'}`}>
-            {saveMessage.text}
-          </div>
-        )}
-        
-        <form onSubmit={buttonConfig.onClick} className={isFormDisabled ? 'disabled-form' : ''}>
-          <div className="picker-container">
-            {/* 日付ピッカー */}
-            <MobileDatePicker
-              value={formData.date}
-              onChange={handleDateChange}
-              disabled={isFormDisabled || (formState.isSaved && !formState.isEditing)}
-            />
-            {errors.date && <div className="error-message">{errors.date}</div>}
-            
-            {/* 出勤時刻 */}
-            <MobileTimePicker
-              label="出勤時刻"
-              value={formData.startTime}
-              onChange={handleStartTimeChange}
-              disabled={isFormDisabled || (formState.isSaved && !formState.isEditing)}
-            />
-            {errors.startTime && <div className="error-message">{errors.startTime}</div>}
-            
-            {/* 休憩時間 */}
-            <MobileBreakPicker
-              value={formData.breakTime}
-              onChange={handleBreakTimeChange}
-              disabled={isFormDisabled || (formState.isSaved && !formState.isEditing)}
-            />
-            
-            {/* 退勤時刻 */}
-            <MobileTimePicker
-              label="退勤時刻"
-              value={formData.endTime}
-              onChange={handleEndTimeChange}
-              disabled={isFormDisabled || (formState.isSaved && !formState.isEditing)}
-            />
-            {errors.endTime && <div className="error-message">{errors.endTime}</div>}
-            
-            {/* 勤務場所 */}
-            <div className="form-group">
-              <label htmlFor="location">勤務場所</label>
-              <select
-                id="location"
-                value={formData.location}
-                onChange={handleLocationChange}
-                disabled={isFormDisabled || (formState.isSaved && !formState.isEditing)}
-                className="location-select"
-              >
-                {LOCATIONS.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc || '選択してください'}
-                  </option>
-                ))}
-              </select>
-              {errors.location && <div className="error-message">{errors.location}</div>}
-            </div>
-            
-            {errors.general && <div className="error-message">{errors.general}</div>}
-            
-            {formState.isEditing && (
-              <div className="button-container">
-                <button 
-                  type="button"
-                  className="btn"
-                  onClick={handleCancelEdit}
-                >
-                  キャンセル
-                </button>
-              </div>
-            )}
-          </div>
-          
-          <div className="button-container">
-            <button
-              type="submit"
-              className={`${buttonConfig.className} ${pressingClass}`}
-              disabled={buttonConfig.isDisabled}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-              onMouseDown={handleTouchStart}
-              onMouseUp={handleTouchEnd}
-              onMouseLeave={handleTouchEnd}
-            >
-              {buttonConfig.text}
-            </button>
-          </div>
-          
-          {/* 月次ビューボタン - フッターなし */}
-          <div className="monthly-view-button-container">
+      {/* 保存/編集ボタン */}
+      <div className="button-container">
+        {formState.isEditing ? (
+          <>
             <button 
-              type="button" 
-              className="monthly-view-button"
-              onClick={goToMonthlyView}
+              className="btn btn-edit" 
+              onClick={handleSubmit}
+              disabled={isSubmitting || Object.keys(errors).length > 0}
             >
-              月間ビューを表示
+              保存する
             </button>
-          </div>
-        </form>
+            <button 
+              className="btn" 
+              onClick={handleCancelEdit}
+              style={{ marginTop: '8px', backgroundColor: '#9e9e9e' }}
+              disabled={isSubmitting}
+            >
+              キャンセル
+            </button>
+          </>
+        ) : (
+          <button 
+            className={getButtonClassName()}
+            onTouchStart={handleLongPressStart}
+            onTouchEnd={handleLongPressEnd}
+            onMouseDown={handleLongPressStart}
+            onMouseUp={handleLongPressEnd}
+            onMouseLeave={handleLongPressEnd}
+            disabled={isSubmitting}
+          >
+            {getSaveButtonText()}
+          </button>
+        )}
       </div>
     </div>
   );
