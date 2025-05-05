@@ -1,18 +1,12 @@
 /** 
  * /src/components/MonthlyView.tsx
- * 2025-05-04T23:00+09:00
- * 変更概要: 更新 - onLogoutプロパティ型定義の修正、日付表示形式の正規化
+ * 2025-05-05T15:45+09:00
+ * 変更概要: 更新 - ヘッダー部分を共通Headerコンポーネントに移行、ユーザー情報表示の削除
  */
 import React, { useState } from 'react';
 import { useKintai } from '../contexts/KintaiContext';
-import { getUserName, logout } from '../utils/apiService';
 
-// 明示的なプロパティ型定義
-interface MonthlyViewProps {
-  onLogout?: () => void; // 省略可能な関数プロパティ
-}
-
-const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
+const MonthlyView: React.FC = () => {
   const {
     monthlyData,
     isDataLoading,
@@ -24,9 +18,6 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
   } = useKintai();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // ユーザー名の取得
-  const userName = getUserName();
 
   // 前月・翌月に移動する関数
   const goToPreviousMonth = () => {
@@ -92,9 +83,10 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
       const date = new Date(formattedDate);
       
       if (isNaN(date.getTime())) {
-        // 無効な日付の場合、直接文字列から日を抽出
-        const match = dateStr.match(/(\d+)(?:\/|-|年)(\d+)(?:\/|-|月)(\d+)(?:日)?/);
-        return match ? `${parseInt(match[3])}日` : 'エラー';
+        // 無効な日付の場合、正規化された文字列から日を抽出
+        const normalized = normalizeDateForDisplay(dateStr); // 正規化を試みる
+        const match = normalized.match(/^\d{4}-\d{2}-(\d{2})$/);
+        return match && match[1] ? `${parseInt(match[1])}日` : 'エラー';
       }
       return `${date.getDate()}日`;
     } catch (e) {
@@ -109,25 +101,28 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
    */
   const normalizeDateForDisplay = (dateStr: string): string => {
     if (!dateStr) return '';
-    
+
     // すでにYYYY-MM-DD形式の場合はそのまま返す
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return dateStr;
     }
-    
+
     // YYYY/MM/DD形式の場合はYYYY-MM-DD形式に変換
     if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateStr)) {
-      const [year, month, day] = dateStr.split('/');
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
     }
-    
+
     // 日本語形式（YYYY年MM月DD日）の場合はYYYY-MM-DD形式に変換
     const jpMatch = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-    if (jpMatch) {
+    if (jpMatch && jpMatch.length === 4) {
       const [_, year, month, day] = jpMatch;
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
-    
+
     // その他の形式の場合はDateオブジェクトを使って変換
     try {
       const date = new Date(dateStr);
@@ -135,11 +130,12 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       }
     } catch (e) {
-      console.error('日付変換エラー:', e);
+      console.error('日付変換エラー:', e, dateStr);
     }
-    
-    // 変換に失敗した場合は元の文字列を返す
-    return dateStr;
+
+    // 変換に失敗した場合は元の文字列を返すか、エラーを示す値を返す
+    console.warn('未対応の日付形式:', dateStr);
+    return dateStr; // または適切なエラー表示
   };
 
   // 時刻のフォーマット（例：9:00）
@@ -156,10 +152,15 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
       }
       
       // すでにHH:MM形式の場合はそのまま返す
-      if (timeStr.match(/^\d{1,2}:\d{2}$/)) {
-        return timeStr;
+      const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+      if (timeMatch) {
+        // 時間や分が1桁の場合に0埋めする (例: 9:5 -> 09:05)
+        const hours = timeMatch[1].padStart(2, '0');
+        const minutes = timeMatch[2].padStart(2, '0');
+        return `${hours}:${minutes}`;
       }
-      
+
+      // 変換できなかった場合は元の文字列を返す
       return timeStr;
     } catch (e) {
       return timeStr;
@@ -174,37 +175,47 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
     if (!workTimeStr) return '-';
     
     try {
-      // 既に時:分形式の場合
-      if (/^\d{1,2}:\d{2}$/.test(workTimeStr)) {
-        return workTimeStr;
+      // 既にHH:MM形式の場合
+      const timeMatch = workTimeStr.match(/^(\d{1,2}):(\d{2})$/);
+      if (timeMatch) {
+        return `${timeMatch[1]}:${timeMatch[2]}`; // そのまま返す
       }
-      
-      // ISO形式のタイムスタンプの場合 (1899-12-29T22:57:00.000Z)
-      if (workTimeStr.includes('1899-12-') && workTimeStr.includes('T')) {
-        const timeMatch = workTimeStr.match(/T(\d{2}):(\d{2}):(\d{2})/);
-        if (timeMatch) {
-          const [_, hours, minutes] = timeMatch;
+
+      // ISO形式のタイムスタンプの場合 (例: 1899-12-30T08:30:00.000Z)
+      // Excel等で時間だけ入力した場合にこのような形式になることがある
+      if (workTimeStr.includes('T') && workTimeStr.includes('Z')) {
+        const isoTimeMatch = workTimeStr.match(/T(\d{2}):(\d{2}):(\d{2})/);
+        if (isoTimeMatch && isoTimeMatch.length === 4) {
+          const [_, hours, minutes] = isoTimeMatch;
+          // Excel由来の場合、日付部分がずれていることがあるため時間だけ抽出
           return `${parseInt(hours)}:${minutes}`;
         }
       }
-      
-      // "12.8h"のような形式の場合
-      const hourMatch = workTimeStr.match(/^(\d+)\.?(\d*)h?$/);
+
+      // "8.5h" や "8h" のような形式の場合
+      const hourMatch = workTimeStr.match(/^(\d+)(?:\.(\d+))?h?$/);
       if (hourMatch) {
         const hours = parseInt(hourMatch[1]);
         let minutes = 0;
-        
-        // 小数部分があれば分に変換
         if (hourMatch[2]) {
-          // 小数点以下を60倍して分に変換
-          minutes = Math.round(parseFloat(`0.${hourMatch[2]}`) * 60);
+          // 小数点以下を60倍して分に変換 (例: 0.5 -> 30分)
+          const decimalPart = parseFloat(`0.${hourMatch[2]}`);
+          minutes = Math.round(decimalPart * 60);
         }
-        
         return `${hours}:${minutes.toString().padStart(2, '0')}`;
       }
-      
-      // その他の形式の場合は変換できないので元の値を返す
-      return workTimeStr;
+
+      // 数値（分単位）の場合 - 文字列として渡される可能性も考慮
+      const minutesOnly = parseInt(workTimeStr, 10);
+      if (!isNaN(minutesOnly) && minutesOnly >= 0) {
+         const hours = Math.floor(minutesOnly / 60);
+         const minutes = minutesOnly % 60;
+         return `${hours}:${minutes.toString().padStart(2, '0')}`;
+      }
+
+      // その他の形式の場合は変換できないので元の値を返すか、エラー表示
+      console.warn('未対応の勤務時間形式:', workTimeStr);
+      return workTimeStr; // または '-' など
     } catch (e) {
       console.error('勤務時間フォーマットエラー:', e, workTimeStr);
       return '-';
@@ -219,38 +230,51 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
     if (!workTimeStr) return 0;
     
     try {
-      // 時:分形式 (8:30) の場合
+      // 時:分形式 (例: 8:30)
       const timeMatch = workTimeStr.match(/^(\d{1,2}):(\d{2})$/);
-      if (timeMatch) {
-        const hours = parseInt(timeMatch[1]);
-        const minutes = parseInt(timeMatch[2]);
-        return hours * 60 + minutes;
-      }
-      
-      // ISO形式のタイムスタンプの場合 (1899-12-29T22:57:00.000Z)
-      if (workTimeStr.includes('1899-12-') && workTimeStr.includes('T')) {
-        const timeMatch = workTimeStr.match(/T(\d{2}):(\d{2}):(\d{2})/);
-        if (timeMatch) {
-          const [_, hours, minutes] = timeMatch;
-          return parseInt(hours) * 60 + parseInt(minutes);
+      if (timeMatch && timeMatch.length === 3) {
+        const hours = parseInt(timeMatch[1], 10);
+        const minutes = parseInt(timeMatch[2], 10);
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          return hours * 60 + minutes;
         }
       }
-      
-      // "12.8h"のような形式の場合
-      const hourMatch = workTimeStr.match(/^(\d+)\.?(\d*)h?$/);
+
+      // ISO形式のタイムスタンプの場合 (例: 1899-12-30T08:30:00.000Z)
+      if (workTimeStr.includes('T') && workTimeStr.includes('Z')) {
+        const isoTimeMatch = workTimeStr.match(/T(\d{2}):(\d{2}):(\d{2})/);
+        if (isoTimeMatch && isoTimeMatch.length === 4) {
+          const hours = parseInt(isoTimeMatch[1], 10);
+          const minutes = parseInt(isoTimeMatch[2], 10);
+          if (!isNaN(hours) && !isNaN(minutes)) {
+            return hours * 60 + minutes;
+          }
+        }
+      }
+
+      // "8.5h" や "8h" のような形式の場合
+      const hourMatch = workTimeStr.match(/^(\d+)(?:\.(\d+))?h?$/);
       if (hourMatch) {
-        const hours = parseInt(hourMatch[1]);
-        let minutes = 0;
-        
-        // 小数部分があれば分に変換
-        if (hourMatch[2]) {
-          // 小数点以下を60倍して分に変換
-          minutes = Math.round(parseFloat(`0.${hourMatch[2]}`) * 60);
+        const hours = parseInt(hourMatch[1], 10);
+        let totalMinutes = 0;
+        if (!isNaN(hours)) {
+          totalMinutes = hours * 60;
+          if (hourMatch[2]) {
+            const decimalPart = parseFloat(`0.${hourMatch[2]}`);
+            if (!isNaN(decimalPart)) {
+              totalMinutes += Math.round(decimalPart * 60);
+            }
+          }
+          return totalMinutes;
         }
-        
-        return hours * 60 + minutes;
       }
-      
+
+      // 数値（分単位）の場合 - 文字列として渡される可能性も考慮
+      const minutesOnly = parseInt(workTimeStr, 10);
+      if (!isNaN(minutesOnly) && minutesOnly >= 0) {
+         return minutesOnly;
+      }
+
       // その他の形式では0を返す
       return 0;
     } catch (e) {
@@ -268,24 +292,6 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
       console.error('データ更新エラー:', error);
     } finally {
       setTimeout(() => setIsRefreshing(false), 1000); // 視覚的フィードバック用
-    }
-  };
-
-  // 日次入力画面へ移動
-  const goToDailyInput = () => {
-    window.location.href = '/';
-  };
-
-  // ログアウト処理
-  const handleLogout = async () => {
-    if (onLogout) {
-      // 親コンポーネントからのonLogout関数が渡された場合はそれを実行
-      await logout();
-      onLogout();
-    } else {
-      // 渡されていない場合はデフォルトの動作
-      await logout();
-      window.location.href = '/login';
     }
   };
 
@@ -311,23 +317,7 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
   };
 
   return (
-    <div className="monthly-view">
-      {/* ヘッダー - 簡素化 */}
-      <div className="monthly-header">
-        <h1>勤怠管理</h1>
-        {userName && (
-          <div className="user-info">
-            <span className="user-name">{userName}</span>
-          </div>
-        )}
-      </div>
-      
-      {/* ナビゲーションタブ */}
-      <div className="nav-tabs">
-        <button className="tab-button" onClick={goToDailyInput}>日次入力</button>
-        <button className="tab-button active">月間ビュー</button>
-      </div>
-      
+    <div className="monthly-content">
       {/* 月選択と更新ボタン */}
       <div className="month-control">
         <div className="month-selector">
@@ -395,7 +385,8 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
                     </td>
                     <td className="col-time">{formatTime(record.startTime)}</td>
                     <td className="col-time">{formatTime(record.endTime)}</td>
-                    <td className="col-break">{formatTime(record.breakTime)}</td>
+                    {/* 休憩時間は分単位で保存されている想定。時:分形式に変換して表示 */}
+                    <td className="col-break">{formatWorkTime(String(record.breakTime))}</td>
                     <td className="col-worktime">{formatWorkTime(record.workingTime)}</td>
                     <td className="col-location">{record.location || '-'}</td>
                   </tr>
@@ -404,22 +395,6 @@ const MonthlyView: React.FC<MonthlyViewProps> = ({ onLogout }) => {
             )}
           </tbody>
         </table>
-      </div>
-      
-      {/* フッターナビゲーション */}
-      <div className="footer-navigation">
-        <button 
-          className="nav-button"
-          onClick={goToDailyInput}
-        >
-          日次入力へ戻る
-        </button>
-        <button 
-          className="logout-button"
-          onClick={handleLogout}
-        >
-          ログアウト
-        </button>
       </div>
       
       {/* ローディングオーバーレイ */}

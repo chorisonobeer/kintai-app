@@ -57,3 +57,9 @@ export interface KintaiData {
     DATE_CHANGE,
     CHECK_SAVED
   }
+
+  // MobileDatePickerで使用する選択可能な日付の型
+  export interface SelectableDate {
+    value: string;
+    label: string;
+  }

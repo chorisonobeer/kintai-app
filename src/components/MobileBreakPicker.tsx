@@ -85,7 +85,7 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
   };
   
   return (
-    <div className="form-group">
+    <div className="form-group break-picker-group"> {/* Add a specific class for styling */}
       <label>休憩時間</label>
       <span className="time-display">{formatBreakTime(Number(pickerValue.breakTime))}</span>
       

@@ -115,7 +115,8 @@ export const getSelectableDates = (): {value: string, label: string}[] => {
     });
   }
   
-  return dates;
+  // 日付を昇順（過去から現在へ）にソートして返す
+  return dates.reverse();
 };
 
 /**

@@ -73,7 +73,7 @@ const MobileTimePicker: React.FC<MobileTimePickerProps> = ({
   const displayTime = `${pickerValue.hour}:${pickerValue.minute}`;
   
   return (
-    <div className="form-group">
+    <div className="form-group time-picker-group"> {/* Add a specific class for styling */}
       <label>{label}</label>
       <span className="time-display">{displayTime}</span>
       

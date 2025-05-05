@@ -1,7 +1,7 @@
 /** 
  * /src/components/KintaiForm.tsx
- * 2025-05-04T23:00+09:00
- * 変更概要: 更新 - formatDateWithWeekday参照問題の修正、日付選択方式の変更
+ * 2025-05-05T15:45+09:00
+ * 変更概要: 更新 - ヘッダー部分を共通Headerコンポーネントに移行、ユーザー情報表示の削除
  */
 import React, { useState, useEffect, useCallback, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,7 +20,7 @@ import {
   isTimeBeforeOrEqual,
   getSelectableDates
 } from '../utils/dateUtils';
-import { saveKintaiToServer, isAuthenticated, getUserName, logout, isEnteredDate } from '../utils/apiService';
+import { saveKintaiToServer, isAuthenticated, isEnteredDate } from '../utils/apiService';
 
 // 初期状態
 const initialState: KintaiFormState = {
@@ -237,15 +237,6 @@ const KintaiForm: React.FC = () => {
     setErrors({});
   };
   
-  // ログアウト処理
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
-  
-  // ユーザー名取得
-  const userName = getUserName();
-  
   // 保存ボタンのテキスト
   const getSaveButtonText = () => {
     if (isSubmitting) {
@@ -283,14 +274,6 @@ const KintaiForm: React.FC = () => {
   
   return (
     <div className="kintai-form">
-      {/* ユーザー情報 */}
-      {userName && (
-        <div className="user-info">
-          <span className="user-name">{userName}</span>
-          <button className="logout-button" onClick={handleLogout}>ログアウト</button>
-        </div>
-      )}
-      
       {/* 古い日付警告 */}
       {tooOldDateWarning && (
         <div className="error-box message-box">
@@ -299,12 +282,15 @@ const KintaiForm: React.FC = () => {
       )}
       
       {/* 日付選択 */}
-      <MobileDatePicker 
-        value={formState.date}
-        onChange={handleDateChange}
-        disabled={!formState.isEditing}
-        selectableDates={selectableDates}
-      />
+      <div className="form-group form-group-horizontal">
+        <label>日付</label> {/* Add label here */} 
+        <MobileDatePicker 
+          value={formState.date}
+          onChange={handleDateChange}
+          disabled={!formState.isEditing}
+          selectableDates={selectableDates}
+        />
+      </div>
       
       {/* 出勤時間 */}
       <div className={formState.isEditing ? '' : 'disabled-form'}>

@@ -1,7 +1,7 @@
 /** 
  * /src/components/MobileDatePicker.tsx
- * 2025-05-04T23:15+09:00
- * 変更概要: 更新 - ホイール式から左右矢印による日付選択方式へ変更、型定義の修正
+ * 2025-05-06T10:15+09:00
+ * 変更概要: 修正 - 日付ナビゲーションボタンの動作を修正（< で前日、> で翌日）
  */
 import React from 'react';
 
@@ -49,18 +49,18 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
       <div className="date-selector-container">
         <button 
           className={`date-nav-button ${isPrevDisabled ? 'date-nav-button-disabled' : ''}`}
-          onClick={goToPreviousDate}
+          onClick={goToPreviousDate} // 正: 前日へ移動
           disabled={isPrevDisabled}
-          aria-label="前日"
+          aria-label="前日" // 正: ラベル
         >
           ＜
         </button>
         <span className="date-display">{displayLabel}</span>
         <button 
           className={`date-nav-button ${isNextDisabled ? 'date-nav-button-disabled' : ''}`}
-          onClick={goToNextDate}
+          onClick={goToNextDate} // 正: 翌日へ移動
           disabled={isNextDisabled}
-          aria-label="翌日"
+          aria-label="翌日" // 正: ラベル
         >
           ＞
         </button>
