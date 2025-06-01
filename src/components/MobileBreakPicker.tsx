@@ -3,7 +3,7 @@
  * ${new Date().toISOString()}
  * 変更概要: react-datepickerを使用して他のピッカーと統一感のあるUIに変更
  */
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { MobileBreakPickerProps } from '../types';
 
 
@@ -13,19 +13,7 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
   onChange, 
   disabled = false 
 }) => {
-  const [selectedTime, setSelectedTime] = useState<Date | null>(null);
 
-  useEffect(() => {
-    // value (HH:mm形式) をDateオブジェクトに変換
-    if (value && value.includes(':')) {
-      const [hours, minutes] = value.split(':').map(Number);
-      const date = new Date();
-      date.setHours(hours, minutes, 0, 0);
-      setSelectedTime(date);
-    } else {
-      setSelectedTime(null);
-    }
-  }, [value]);
 
   // 0:00から3:00までの15分間隔の時間配列を生成
   const generateTimeOptions = () => {
@@ -42,28 +30,10 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
 
   const timeOptions = generateTimeOptions();
 
-  // 現在の値を時間文字列に変換
-  const getTimeString = (date: Date | null): string => {
-    if (!date) return '';
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
 
-  const currentTimeString = getTimeString(selectedTime);
 
   const handleSelectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const timeString = event.target.value;
-    if (!timeString) {
-      setSelectedTime(null);
-      onChange('');
-      return;
-    }
-    
-    const [hours, minutes] = timeString.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    setSelectedTime(date);
     onChange(timeString);
   };
 
