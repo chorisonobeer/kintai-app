@@ -58,7 +58,7 @@ function resetPassword() {
   var newSalt = Utilities.getUuid();
   
   // 新しいハッシュを計算
-  var newHash = computeHash(newPassword, newSalt);
+  var newHash = Utils.computeHash(newPassword, newSalt);
   
   // ユーザー情報を更新
   memberSheet.getRange(userRow, 3).setValue(newSalt); // ソルト（C列）

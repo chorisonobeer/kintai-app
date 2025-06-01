@@ -20,6 +20,7 @@ yarn-error.log*
 # IDE / エディタ関連
 .vscode/
 .idea/
+.cursor/
 *.suo
 *.ntvs*
 *.njsproj

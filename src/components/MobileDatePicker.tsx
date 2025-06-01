@@ -1,69 +1,114 @@
-/** 
+/**
  * /src/components/MobileDatePicker.tsx
- * 2025-05-06T10:15+09:00
- * 変更概要: 修正 - 日付ナビゲーションボタンの動作を修正（< で前日、> で翌日）
+ * 2025-01-20T10:00:00+09:00
+ * 変更概要: 日付移動機能（＜＞ボタン）を追加
  */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import { ja } from 'date-fns/locale';
+import 'react-datepicker/dist/react-datepicker.css';
 
-// 明示的なプロパティ型定義
+// 日本語ロケールを登録
+registerLocale('ja', ja);
+
 interface MobileDatePickerProps {
-  value: string;
+  value: string; // YYYY-MM-DD 形式
   onChange: (date: string) => void;
   disabled?: boolean;
-  selectableDates: { value: string; label: string }[];
+  selectableDates?: { value: string; label: string }[]; 
 }
 
 const MobileDatePicker: React.FC<MobileDatePickerProps> = ({ 
   value, 
   onChange, 
-  disabled = false,
-  selectableDates 
+  disabled = false
 }) => {
-  // 現在選択中の日付のインデックスを取得
-  const currentIndex = selectableDates.findIndex(date => date.value === value);
-  
-  // 前の日付に移動
-  const goToPreviousDate = () => {
-    if (currentIndex > 0 && !disabled) {
-      onChange(selectableDates[currentIndex - 1].value);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (value) {
+      setSelectedDate(new Date(value));
+    } else {
+      setSelectedDate(new Date()); // デフォルトは今日
+    }
+  }, [value]);
+
+  const handleDateChange = (date: Date | null) => {
+    setSelectedDate(date);
+    if (date) {
+      // YYYY-MM-DD 形式の文字列で onChange を呼び出す
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      onChange(`${year}-${month}-${day}`);
     }
   };
-  
-  // 次の日付に移動
-  const goToNextDate = () => {
-    if (currentIndex < selectableDates.length - 1 && !disabled) {
-      onChange(selectableDates[currentIndex + 1].value);
+
+  // 表示用の日付フォーマット
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  // 前の日に移動
+  const handlePreviousDay = () => {
+    if (selectedDate) {
+      const prevDate = new Date(selectedDate);
+      prevDate.setDate(prevDate.getDate() - 1);
+      handleDateChange(prevDate);
     }
   };
-  
-  // 表示用の日付ラベルを取得
-  const displayLabel = selectableDates.find(date => date.value === value)?.label || '';
-  
-  // 前後の日付ボタンの無効状態を設定
-  const isPrevDisabled = currentIndex <= 0 || disabled;
-  const isNextDisabled = currentIndex >= selectableDates.length - 1 || disabled;
+
+  // 次の日に移動
+  const handleNextDay = () => {
+    if (selectedDate) {
+      const nextDate = new Date(selectedDate);
+      nextDate.setDate(nextDate.getDate() + 1);
+      handleDateChange(nextDate);
+    }
+  };
 
   return (
-    <div className="form-group">
+    <div className="form-group date-picker-group">
       <label>日付</label>
-      <div className="date-selector-container">
-        <button 
-          className={`date-nav-button ${isPrevDisabled ? 'date-nav-button-disabled' : ''}`}
-          onClick={goToPreviousDate} // 正: 前日へ移動
-          disabled={isPrevDisabled}
-          aria-label="前日" // 正: ラベル
-        >
-          ＜
-        </button>
-        <span className="date-display">{displayLabel}</span>
-        <button 
-          className={`date-nav-button ${isNextDisabled ? 'date-nav-button-disabled' : ''}`}
-          onClick={goToNextDate} // 正: 翌日へ移動
-          disabled={isNextDisabled}
-          aria-label="翌日" // 正: ラベル
-        >
-          ＞
-        </button>
+      
+      <div className="month-control">
+        <div className="month-selector">
+          <button 
+            type="button"
+            className="month-nav-button"
+            onClick={handlePreviousDay}
+            disabled={disabled}
+            aria-label="前日"
+          >
+            ＜
+          </button>
+          
+          {disabled ? (
+            <h2 className="date-display">{formatDisplayDate(value)}</h2>
+          ) : (
+            <DatePicker
+              selected={selectedDate}
+              onChange={handleDateChange}
+              dateFormat="yyyy/MM/dd"
+              locale="ja"
+              className="custom-datepicker-input"
+              popperPlacement="bottom-start"
+              disabled={disabled}
+            />
+          )}
+          
+          <button 
+            type="button"
+            className="month-nav-button"
+            onClick={handleNextDay}
+            disabled={disabled}
+            aria-label="翌日"
+          >
+            ＞
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -2,12 +2,13 @@
 
 // ————————————————————————————————
 // 勤怠データ登録・保存用
-export type KintaiData = {
+export interface KintaiData {
     date: string;        // yyyy-MM-dd
     startTime: string;   // HH:mm
-    breakTime: number;   // 分数で保持
+    breakTime: string;   // HH:mm形式で保持
     endTime: string;     // HH:mm
     location?: string;
+    workingTime?: string; // 勤務時間（HH:mm形式）
   };
   
   // ————————————————————————————————
@@ -15,7 +16,7 @@ export type KintaiData = {
   export interface KintaiFormState {
     date: string;
     startTime: string;
-    breakTime: number;    // 分数で保持
+    breakTime: string;    // HH:mm形式で保持
     endTime: string;
     location?: string;
   
@@ -59,10 +60,10 @@ export type KintaiData = {
   // ————————————————————————————————
   // モバイル用休憩ピッカー Props
   export interface MobileBreakPickerProps {
-    value: number;
-    onChange: (minutes: number) => void;
-    disabled?: boolean;
-  }
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}
   
   // ————————————————————————————————
   // 一覧表示用勤怠履歴レコード
@@ -71,9 +72,9 @@ export type KintaiData = {
     userName: string;
     userId: string;
     startTime: string;
-    breakTime: string;
+    breakTime: number | undefined; // スプレッドシートのD列が空の場合はundefined
     endTime: string;
-    workingTime: string; // ex: '8.0h'
+    workingTime: string; // ex: '8.0h' - スプレッドシートのF列から取得
     location?: string;
   };
   

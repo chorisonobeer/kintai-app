@@ -276,8 +276,8 @@ Auth.storeToken = function(token, userId, userName, spreadsheetId) {
       userId: userId,
       userName: userName,
       spreadsheetId: spreadsheetId,
-      created: new Date().getTime(),
-      expires: new Date().getTime() + (7 * 24 * 60 * 60 * 1000) // 7日間有効
+      created: new Date().getTime()
+      // expires設定を削除 - ログアウトするまで有効
     };
     
     PropertiesService.getScriptProperties()
@@ -304,12 +304,13 @@ Auth.checkToken = function(token) {
     try {
       const tokenInfo = JSON.parse(stored);
       
-      // 有効期限チェック
+      // 有効期限チェック（expiresが設定されている場合のみ）
       if (tokenInfo.expires && tokenInfo.expires < new Date().getTime()) {
         // 期限切れならトークンを削除
         scriptProps.deleteProperty('token_' + token);
         return { valid: false, reason: 'expired' };
       }
+      // expiresが設定されていない場合は期限切れチェックをスキップ（ログアウトまで有効）
       
       return { valid: true, ...tokenInfo };
     } catch (parseErr) {

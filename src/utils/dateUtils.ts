@@ -51,6 +51,41 @@ export const isDateTooOld = (dateString: string): boolean => {
 };
 
 /**
+ * HH:mm形式の文字列を分数に変換する
+ */
+export const parseTimeStringToMinutes = (timeString: string): number => {
+  if (!timeString || timeString === '0:00') return 0;
+  
+  const parts = timeString.split(':');
+  if (parts.length !== 2) return 0;
+  
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  
+  if (isNaN(hours) || isNaN(minutes)) return 0;
+  
+  return hours * 60 + minutes;
+};
+
+/**
+ * 分数をHH:mm形式の文字列に変換する
+ */
+export const formatBreakTimeFromMinutes = (minutes: number | string | undefined | null): string => {
+  // undefinedやnullの場合は空文字を返す（データが無い状態）
+  if (minutes === undefined || minutes === null) return '';
+  
+  // 0の場合は「0:00」を表示
+  if (minutes === 0) return '0:00';
+  
+  const totalMinutes = typeof minutes === 'string' ? parseInt(minutes, 10) : minutes;
+  if (isNaN(totalMinutes) || totalMinutes < 0) return '';
+  
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return `${hours}:${mins.toString().padStart(2, '0')}`;
+};
+
+/**
  * 日付が許容範囲内かどうかチェックする
  * 現在より2日前から当日までが有効
  */

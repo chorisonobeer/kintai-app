@@ -5,6 +5,7 @@
  */
 import React, { useState } from 'react';
 import { useKintai } from '../contexts/KintaiContext';
+import { formatBreakTimeFromMinutes } from '../utils/dateUtils';
 
 const MonthlyView: React.FC = () => {
   const {
@@ -75,7 +76,7 @@ const MonthlyView: React.FC = () => {
     }
   };
 
-  // 日付表示のフォーマット（例：3日）
+  // 日付表示のフォーマット（例：3（水））
   const formatDay = (dateStr: string): string => {
     try {
       // 複数の日付形式に対応
@@ -86,9 +87,10 @@ const MonthlyView: React.FC = () => {
         // 無効な日付の場合、正規化された文字列から日を抽出
         const normalized = normalizeDateForDisplay(dateStr); // 正規化を試みる
         const match = normalized.match(/^\d{4}-\d{2}-(\d{2})$/);
-        return match && match[1] ? `${parseInt(match[1])}日` : 'エラー';
+        return match && match[1] ? `${parseInt(match[1])}（?）` : 'エラー';
       }
-      return `${date.getDate()}日`;
+      const dayOfWeek = getDayOfWeekName(dateStr);
+      return `${date.getDate()}（${dayOfWeek}）`;
     } catch (e) {
       console.error('日付フォーマットエラー:', e, dateStr);
       return 'エラー';
@@ -386,7 +388,7 @@ const MonthlyView: React.FC = () => {
                     <td className="col-time">{formatTime(record.startTime)}</td>
                     <td className="col-time">{formatTime(record.endTime)}</td>
                     {/* 休憩時間は分単位で保存されている想定。時:分形式に変換して表示 */}
-                    <td className="col-break">{formatWorkTime(String(record.breakTime))}</td>
+                    <td className="col-break">{formatBreakTimeFromMinutes(record.breakTime)}</td>
                     <td className="col-worktime">{formatWorkTime(record.workingTime)}</td>
                     <td className="col-location">{record.location || '-'}</td>
                   </tr>

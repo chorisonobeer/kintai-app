@@ -1,122 +1,102 @@
-/** 
+/**
  * /src/components/MobileBreakPicker.tsx
- * 2025-05-04T20:30+09:00
- * 変更概要: 更新 - スタイル適用方法の修正、TypeScript型エラーの解消
+ * ${new Date().toISOString()}
+ * 変更概要: react-datepickerを使用して他のピッカーと統一感のあるUIに変更
  */
-import React, { useEffect } from 'react';
-import Picker from 'react-mobile-picker';
+import React, { useState, useEffect } from 'react';
 import { MobileBreakPickerProps } from '../types';
 
-// 休憩時間のオプション（分）- 選択肢を減らす
-const breakTimeOptions = [0, 15, 30, 45, 60, 90, 120];
 
-// 休憩時間ピッカー用の型定義
-interface BreakPickerValue {
-  breakTime: string;
-}
 
 const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({ 
-  value, 
+  value, // string (HH:mm format)
   onChange, 
   disabled = false 
 }) => {
-  // pickerValueは常に親から受け取ったvalueに基づく
-  const pickerValue: BreakPickerValue = {
-    breakTime: String(value)
-  };
+  const [selectedTime, setSelectedTime] = useState<Date | null>(null);
 
-  // スクロール制御のイベントハンドラーを設定
   useEffect(() => {
-    // DOMイベントハンドラー型を使用して型エラーを解決
-    const handleTouchStart = (e: Event) => {
-      // 型キャストを使用してターゲット要素にアクセス
-      const targetEl = e.target as HTMLElement;
-      
-      // ピッカーのホイール部分のタッチ時にbodyのスクロールを無効化
-      if (targetEl?.closest('.picker-column')) {
-        document.body.style.overflow = 'hidden';
-        // DOM APIのイベントはe.stopPropagationのみなのでTypeError解消
-        e.stopPropagation();
+    // value (HH:mm形式) をDateオブジェクトに変換
+    if (value && value.includes(':')) {
+      const [hours, minutes] = value.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      setSelectedTime(date);
+    } else {
+      setSelectedTime(null);
+    }
+  }, [value]);
+
+  // 0:00から3:00までの15分間隔の時間配列を生成
+  const generateTimeOptions = () => {
+    const times = [];
+    for (let hours = 0; hours <= 3; hours++) {
+      for (let minutes = 0; minutes < 60; minutes += 15) {
+        if (hours === 3 && minutes > 0) break; // 3:00で終了
+        const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        times.push(timeString);
       }
-    };
-    
-    const handleTouchEnd = () => {
-      // タッチ終了後にスクロールを有効化
-      document.body.style.overflow = '';
-    };
-    
-    const pickerElement = document.querySelector('.time-picker-wrapper');
-    
-    if (pickerElement) {
-      pickerElement.addEventListener('touchstart', handleTouchStart);
-      pickerElement.addEventListener('touchend', handleTouchEnd);
-      pickerElement.addEventListener('touchcancel', handleTouchEnd);
+    }
+    return times;
+  };
+
+  const timeOptions = generateTimeOptions();
+
+  // 現在の値を時間文字列に変換
+  const getTimeString = (date: Date | null): string => {
+    if (!date) return '';
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const currentTimeString = getTimeString(selectedTime);
+
+  const handleSelectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const timeString = event.target.value;
+    if (!timeString) {
+      setSelectedTime(null);
+      onChange('');
+      return;
     }
     
-    return () => {
-      if (pickerElement) {
-        pickerElement.removeEventListener('touchstart', handleTouchStart);
-        pickerElement.removeEventListener('touchend', handleTouchEnd);
-        pickerElement.removeEventListener('touchcancel', handleTouchEnd);
-      }
-    };
-  }, []);
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    setSelectedTime(date);
+    onChange(timeString);
+  };
 
-  // Reactのタッチイベントハンドラー
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const touchX = e.touches[0].clientX;
-    
-    // ホイール中央部分のみイベント伝播を停止
-    if (Math.abs(touchX - centerX) < rect.width / 3) {
-      e.stopPropagation();
+  // 表示用の休憩時間文字列を生成
+  const formatBreakTime = (timeString: string | undefined | null): string => {
+    // undefinedやnullの場合は「未入力」を返す
+    if (!timeString || timeString === '') {
+      return '未入力';
     }
+    
+    // 既にHH:mm形式の場合はそのまま返す
+    return timeString;
   };
 
-  // 型アサーションを使用して型の互換性を確保
-  const handlePickerChange = (newValue: any) => {
-    const newBreakTime = Number((newValue as BreakPickerValue).breakTime);
-    onChange(newBreakTime);
-  };
-
-  const formatBreakTime = (minutes: number): string => {
-    return minutes === 0 ? 'なし' : `${minutes}分`;
-  };
-  
   return (
-    <div className="form-group break-picker-group"> {/* Add a specific class for styling */}
+    <div className="form-group break-picker-group">
       <label>休憩時間</label>
-      <span className="time-display">{formatBreakTime(Number(pickerValue.breakTime))}</span>
       
-      <div 
-        className="time-picker-wrapper"
-        onTouchMove={handleTouchMove}
-      >
-        <div className="picker-highlight"></div>
-        
-        {!disabled && (
-          // 型エラーを回避するため、スタイルプロパティを完全に削除し、CSSクラスに依存
-          <Picker
-            value={pickerValue}
-            onChange={handlePickerChange}
-            height={90}
-            itemHeight={30}
-            wheelMode="normal"
-          >
-            <Picker.Column name="breakTime">
-              {breakTimeOptions.map(minutes => (
-                <Picker.Item 
-                  key={minutes} 
-                  value={String(minutes)}
-                >
-                  {formatBreakTime(minutes)}
-                </Picker.Item>
-              ))}
-            </Picker.Column>
-          </Picker>
-        )}
-      </div>
+      {disabled ? (
+        <div className="time-display">{formatBreakTime(value)}</div>
+      ) : (
+        <select
+          value={value || ''}
+          onChange={handleSelectChange}
+          className="custom-datepicker-input time-input-enabled"
+          disabled={disabled}
+        >
+          <option value="">未入力</option>
+          {timeOptions.map(time => (
+            <option key={time} value={time}>{time}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 };

@@ -543,7 +543,21 @@
   
   /* 勤務時間列のスタイル */
   .col-worktime {
-    font-weight: 500;
+    font-weight: bold;
+    text-align: center;
+    color: #3f51b5;
+  }
+  
+  /* 勤務時間ヘッダーのスタイル */
+  th.col-worktime {
+    font-weight: bold;
+    color: #3f51b5;
+  }
+  
+  /* 勤務時間データセルのスタイル */
+  td.col-worktime {
+    font-weight: bold;
+    color: #3f51b5;
     text-align: center;
   }
   

@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Picker from 'react-mobile-picker';
+/**
+ * /src/components/MobileTimePicker.tsx
+ * 2025-01-27T10:00+09:00
+ * 変更概要: selectピッカー形式に変更、7:00-20:00の時間範囲、出勤時間は8:00、退勤時間は17:00を初期表示
+ */
+import React, { useState, useEffect } from 'react';
 import { MobileTimePickerProps } from '../types';
-
-interface TimePickerValue {
-  hour: string;
-  minute: string;
-}
 
 const MobileTimePicker: React.FC<MobileTimePickerProps> = ({ 
   label, 
@@ -13,99 +12,85 @@ const MobileTimePicker: React.FC<MobileTimePickerProps> = ({
   onChange, 
   disabled = false 
 }) => {
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minutes = ['00', '15', '30', '45'];
-  
-  // 初期化されたかどうかを追跡
-  const initializedRef = useRef(false);
-  
-  // 現在の値を分解
-  const [hour, minute] = value ? value.split(':') : ['09', '00'];
-  
-  // 最も近い15分刻みを見つける
-  const closestMinute = React.useMemo(() => {
-    const min = parseInt(minute, 10);
-    return minutes.reduce((prev, curr) => {
-      const prevDiff = Math.abs(parseInt(prev, 10) - min);
-      const currDiff = Math.abs(parseInt(curr, 10) - min);
-      return currDiff < prevDiff ? curr : prev;
-    });
-  }, [minute, minutes]);
-  
-  // ローカル状態（内部用）
-  const [pickerValue, setPickerValue] = useState<TimePickerValue>({
-    hour: hour.padStart(2, '0'),
-    minute: closestMinute
-  });
-  
-  // ユーザーの変更を処理
-  const handlePickerChange = (newValue: any) => {
-    const typedValue = newValue as TimePickerValue;
-    setPickerValue(typedValue);
-    
-    // 親コンポーネントに変更を通知（ただし初期化後のみ）
-    if (initializedRef.current) {
-      const newTimeString = `${typedValue.hour}:${typedValue.minute}`;
-      if (newTimeString !== value) {
-        onChange(newTimeString);
+  const [selectedTime, setSelectedTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (value && value.includes(':')) {
+      const [hours, minutes] = value.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      setSelectedTime(date);
+    } else {
+      setSelectedTime(null);
+    }
+  }, [value]);
+
+  // 7:00から20:00までの15分間隔の時間配列を生成
+  const generateTimeOptions = () => {
+    const times = [];
+    for (let hours = 7; hours <= 20; hours++) {
+      for (let minutes = 0; minutes < 60; minutes += 15) {
+        const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        times.push(timeString);
       }
     }
+    return times;
   };
-  
-  // 初期化とpropsの変更を処理
-  useEffect(() => {
-    // propsの値が変わったとき、かつ内部の値と異なる場合のみ更新
-    const newHour = hour.padStart(2, '0');
-    if (pickerValue.hour !== newHour || pickerValue.minute !== closestMinute) {
-      setPickerValue({
-        hour: newHour,
-        minute: closestMinute
-      });
+
+  const timeOptions = generateTimeOptions();
+
+  // 初期表示値を決定（出勤時間は8:00、退勤時間は17:00）
+  const getDefaultValue = () => {
+    if (label === '出勤時間') {
+      return '08:00';
+    } else if (label === '退勤時間') {
+      return '17:00';
+    }
+    return '';
+  };
+
+  const handleSelectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const timeString = event.target.value;
+    if (!timeString) {
+      setSelectedTime(null);
+      onChange('');
+      return;
     }
     
-    // 初期化完了をマーク
-    if (!initializedRef.current) {
-      initializedRef.current = true;
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    setSelectedTime(date);
+    onChange(timeString);
+  };
+
+  // 表示用の時間文字列を生成
+  const formatTime = (timeString: string | undefined | null): string => {
+    if (!timeString || timeString === '') {
+      return '未入力';
     }
-  }, [value, hour, closestMinute]);
-  
-  // 表示用の時間文字列
-  const displayTime = `${pickerValue.hour}:${pickerValue.minute}`;
-  
+    return timeString;
+  };
+
   return (
-    <div className="form-group time-picker-group"> {/* Add a specific class for styling */}
+    <div className="form-group time-picker-group">
       <label>{label}</label>
-      <span className="time-display">{displayTime}</span>
       
-      <div className="time-picker-wrapper">
-        <div className="picker-highlight"></div>
-        
-        {!disabled && (
-          <Picker
-            value={pickerValue}
-            onChange={handlePickerChange}
-            height={90}
-            itemHeight={30}
-            wheelMode="normal"
-            style={{ margin: '0 auto' }}
-          >
-            <Picker.Column name="hour">
-              {hours.map(h => (
-                <Picker.Item key={h} value={h}>
-                  {h}
-                </Picker.Item>
-              ))}
-            </Picker.Column>
-            <Picker.Column name="minute">
-              {minutes.map(m => (
-                <Picker.Item key={m} value={m}>
-                  {m}
-                </Picker.Item>
-              ))}
-            </Picker.Column>
-          </Picker>
-        )}
-      </div>
+      {disabled ? (
+        <div className="time-display">{formatTime(value)}</div>
+      ) : (
+        <select
+          value={value || ''}
+          onChange={handleSelectChange}
+          className="custom-datepicker-input time-input-enabled"
+          disabled={disabled}
+        >
+          <option value="">未入力</option>
+          {timeOptions.map(time => (
+            <option key={time} value={time}>{time}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 };

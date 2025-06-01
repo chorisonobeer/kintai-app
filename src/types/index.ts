@@ -6,9 +6,10 @@
 export interface KintaiData {
     date: string;
     startTime: string;
-    breakTime: number;
+    breakTime: string; // 休憩時間（HH:mm形式）
     endTime: string;
-  location: string;
+    location: string;
+    workingTime?: string; // 勤務時間（HH:mm形式）
   }
   
   export interface MobileTimePickerProps {
@@ -25,8 +26,8 @@ export interface KintaiData {
   }
   
   export interface MobileBreakPickerProps {
-    value: number;
-    onChange: (value: number) => void;
+    value: string;
+    onChange: (value: string) => void;
     disabled?: boolean;
   }
   
@@ -41,7 +42,7 @@ export interface KintaiData {
   export interface KintaiFormState {
     date: string;          // 現在選択中の日付
     startTime: string;     // 出勤時刻
-    breakTime: number;     // 休憩時間（分）
+    breakTime: string;     // 休憩時間（HH:mm形式）
     endTime: string;       // 退勤時刻
     isSaved: boolean;      // 現在の日付が保存済みかどうか
     isEditing: boolean;    // 編集モード中かどうか

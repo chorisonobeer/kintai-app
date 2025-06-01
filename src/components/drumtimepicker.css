@@ -1,0 +1,341 @@
+/**
+ * /src/components/DrumTimePicker.css
+ * 2025-01-20T10:00+09:00
+ * 変更概要: 新規追加 - ドラム型時間ピッカーのスタイル
+ */
+
+.drum-time-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drum-time-picker-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.drum-time-picker-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--card-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 16px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 48px;
+}
+
+.drum-time-picker-button:hover:not(.disabled) {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(61, 90, 254, 0.15);
+}
+
+.drum-time-picker-button:active:not(.disabled) {
+  transform: translateY(1px);
+}
+
+.drum-time-picker-button.disabled {
+  background-color: var(--picker-bg);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.drum-time-picker-value {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.drum-time-picker-icon {
+  font-size: 20px;
+  opacity: 0.7;
+}
+
+.drum-time-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.drum-time-picker-modal {
+  background-color: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: drumModalSlideUp 0.3s ease-out;
+}
+
+@keyframes drumModalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.drum-time-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.drum-time-picker-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.drum-time-picker-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.drum-time-picker-close:hover {
+  background-color: var(--picker-bg);
+  color: var(--text-primary);
+}
+
+.drum-time-picker-content {
+  padding: 24px;
+}
+
+.drum-time-picker-drums {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.drum-time-picker-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.drum-time-picker-column-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.drum-time-picker-separator {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--text-primary);
+  margin: 0 8px;
+  align-self: center;
+  margin-top: 32px;
+}
+
+.drum-picker-item {
+  position: relative;
+  width: 80px;
+  height: 200px;
+}
+
+.drum-picker-highlight {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 50px;
+  transform: translateY(-50%);
+  background-color: var(--primary-color);
+  opacity: 0.1;
+  border-radius: 8px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.drum-picker-container {
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+  position: relative;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.drum-picker-container::-webkit-scrollbar {
+  display: none;
+}
+
+.drum-picker-container:active {
+  cursor: grabbing;
+}
+
+.drum-picker-container.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.drum-picker-padding {
+  height: 75px;
+  flex-shrink: 0;
+}
+
+.drum-picker-option {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  margin: 0 4px;
+  position: relative;
+  z-index: 2;
+  user-select: none;
+  scroll-snap-align: center;
+}
+
+.drum-picker-option:hover {
+  background-color: var(--picker-bg);
+  color: var(--text-primary);
+}
+
+.drum-picker-option.selected {
+  color: var(--primary-color);
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.drum-time-picker-footer {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.drum-time-picker-confirm {
+  width: 100%;
+  padding: 12px 24px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.drum-time-picker-confirm:hover {
+  background-color: var(--header-color);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(61, 90, 254, 0.3);
+}
+
+.drum-time-picker-confirm:active {
+  transform: translateY(0);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .drum-time-picker-modal {
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: none;
+    animation: drumModalSlideUpMobile 0.3s ease-out;
+  }
+
+  @keyframes drumModalSlideUpMobile {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .drum-time-picker-drums {
+    gap: 20px;
+  }
+
+  .drum-picker-item {
+    width: 90px;
+  }
+
+  .drum-picker-option {
+    font-size: 20px;
+    height: 55px;
+  }
+
+  .drum-picker-option.selected {
+    font-size: 22px;
+  }
+
+  .drum-time-picker-button {
+    min-height: 52px;
+    font-size: 18px;
+  }
+
+  .drum-time-picker-value {
+    font-size: 20px;
+  }
+}
+
+/* Touch improvements */
+@media (hover: none) and (pointer: coarse) {
+  .drum-picker-option:hover {
+    background-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .drum-time-picker-button:hover:not(.disabled) {
+    border-color: var(--border-color);
+    box-shadow: none;
+  }
+
+  .drum-time-picker-close:hover {
+    background-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .drum-time-picker-confirm:hover {
+    background-color: var(--primary-color);
+    transform: none;
+    box-shadow: none;
+  }
+}
