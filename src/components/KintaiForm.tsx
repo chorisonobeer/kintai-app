@@ -145,9 +145,8 @@ const calculateWorkingTime = (startTime: string, endTime: string, breakTime: str
     
     return `${hours}:${minutes.toString().padStart(2, '0')}`;
   } catch (error) {
-    console.error('勤務時間計算エラー:', error);
-    return '';
-  }
+      return '';
+    }
 };
 
 // formatTimeToHHMM ヘルパー関数は apiService 側で処理するため削除
@@ -192,15 +191,11 @@ const KintaiForm: React.FC = () => {
   useEffect(() => {
     const loadDateInfo = async () => {
       setErrors({}); // 日付変更時にエラーをリセット
-      console.log('[KintaiForm] loadDateInfo triggered for date:', formState.date);
       try {
         const entered = await isEnteredDate(new Date(formState.date));
-        console.log('[KintaiForm] isEnteredDate result:', entered);
         
         if (entered) {
-          console.log('[KintaiForm] Attempting to fetch data for saved date...');
-          const data = await getKintaiDataByDate(formState.date); 
-          console.log('[KintaiForm] Fetched data from getKintaiDataByDate:', data);
+          const data = await getKintaiDataByDate(formState.date);
 
           if (data) {
             // データの詳細をログ出力
@@ -237,7 +232,6 @@ const KintaiForm: React.FC = () => {
             // フォームに値を設定完了
 
           } else {
-            console.log('[KintaiForm] No data found by getKintaiDataByDate, resetting to initial values.');
           dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
           setStartTime(initialState.startTime);
           setBreakTime(initialState.breakTime);
@@ -246,7 +240,6 @@ const KintaiForm: React.FC = () => {
           setWorkingTime(''); // 勤務時間もリセット
           }
         } else {
-          console.log('[KintaiForm] Date not entered, resetting to initial values.');
         dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
         setStartTime(initialState.startTime);
         setBreakTime(initialState.breakTime);
@@ -255,7 +248,6 @@ const KintaiForm: React.FC = () => {
         setWorkingTime(''); // 勤務時間もリセット
         }
       } catch (error) {
-        console.error('[KintaiForm] Error in loadDateInfo:', error);
       setErrors({ general: 'データの読み込みに失敗しました。' });
       setStartTime(initialState.startTime);
       setBreakTime(initialState.breakTime);
@@ -353,7 +345,6 @@ const KintaiForm: React.FC = () => {
         }
       } catch (error) {
         setErrors({ general: '保存中にエラーが発生しました' });
-        console.error('保存エラー:', error);
       }
     }
     

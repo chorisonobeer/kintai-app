@@ -193,13 +193,13 @@ export async function getMonthlyData(
   if (!forceRefresh) {
     const cachedData = getMonthlyDataFromCache(cacheKey);
     if (cachedData) {
-      console.log(`キャッシュから${year}年${month}月のデータを取得しました`);
+
       return cachedData;
     }
   }
   
   // キャッシュになければサーバーから取得
-  console.log(`サーバーから${year}年${month}月のデータを取得します`);
+
   const r = await callGAS<KintaiRecord[]>(
     'getMonthlyData',
     { spreadsheetId, userId, year, month },
@@ -231,13 +231,12 @@ function getMonthlyDataFromCache(cacheKey: string): KintaiRecord[] | null {
     
     // 30分以上経過していたらキャッシュ無効
     if (cacheAge > 30 * 60 * 1000) {
-      console.log('キャッシュ期限切れです');
+
       return null;
     }
     
     return cachedData;
   } catch (e) {
-    console.error('キャッシュ読み込みエラー:', e);
     return null;
   }
 }
@@ -256,9 +255,9 @@ function saveMonthlyDataToCache(cacheKey: string, data: KintaiRecord[]): void {
     sessionStorage.setItem(MONTHLY_DATA_KEY, JSON.stringify(cachedDataMap));
     sessionStorage.setItem(MONTHLY_DATA_TIMESTAMP_KEY + '_' + cacheKey, Date.now().toString());
     
-    console.log(`${cacheKey}のデータをキャッシュに保存しました`);
+
   } catch (e) {
-    console.error('キャッシュ保存エラー:', e);
+    // キャッシュ保存エラーは無視
   }
 }
 
@@ -278,9 +277,9 @@ export function clearMonthlyDataCache(): void {
     
     keys.forEach(key => sessionStorage.removeItem(key));
     
-    console.log('月間データキャッシュをクリアしました');
+
   } catch (e) {
-    console.error('キャッシュクリアエラー:', e);
+    // キャッシュクリアエラーは無視
   }
 }
 
@@ -334,18 +333,13 @@ export async function getKintaiDataByDate(dateString: string): Promise<KintaiDat
     const year = dateObj.getFullYear();
     const month = dateObj.getMonth() + 1; // getMonthは0始まりなので+1
 
-    console.log(`[DEBUG] getKintaiDataByDate - 取得対象日付: ${dateString}`);
+
     
     const monthlyRecords = await getMonthlyData(year, month);
     const record = monthlyRecords.find(r => r.date === dateString);
 
     if (record) {
-      console.log('[DEBUG] getKintaiDataByDate - スプレッドシートから取得した生データ:', record);
-      console.log('[DEBUG] getKintaiDataByDate - C列(出勤時間) 値:', record.startTime, 'type:', typeof record.startTime);
-      console.log('[DEBUG] getKintaiDataByDate - D列(休憩時間) 値:', record.breakTime, 'type:', typeof record.breakTime);
-      console.log('[DEBUG] getKintaiDataByDate - E列(退勤時間) 値:', record.endTime, 'type:', typeof record.endTime);
-      console.log('[DEBUG] getKintaiDataByDate - F列(勤務時間) 値:', record.workingTime, 'type:', typeof record.workingTime);
-      console.log('[DEBUG] getKintaiDataByDate - G列(勤務場所) 値:', record.location, 'type:', typeof record.location);
+
       
       const formattedStartTime = extractHHMM(record.startTime);
       const formattedEndTime = extractHHMM(record.endTime);
@@ -361,10 +355,7 @@ export async function getKintaiDataByDate(dateString: string): Promise<KintaiDat
         breakTime = formatBreakTimeFromMinutes(breakTimeMinutes);
       }
 
-      console.log('[DEBUG] getKintaiDataByDate - フォーマット後の出勤時間:', formattedStartTime);
-      console.log('[DEBUG] getKintaiDataByDate - フォーマット後の退勤時間:', formattedEndTime);
-      console.log('[DEBUG] getKintaiDataByDate - フォーマット後の休憩時間(HH:mm):', breakTime);
-      console.log('[DEBUG] getKintaiDataByDate - フォーマット後の勤務時間:', record.workingTime);
+
 
       return {
         date: record.date,
@@ -375,7 +366,7 @@ export async function getKintaiDataByDate(dateString: string): Promise<KintaiDat
         workingTime: record.workingTime || '', // スプレッドシートのF列から取得
       };
     } else {
-      console.log(`[DEBUG] getKintaiDataByDate - ${dateString}のデータが見つかりませんでした`);
+
     }
     return null;
   } catch (error) {
@@ -400,7 +391,6 @@ export async function isEnteredDate(date: Date): Promise<boolean> {
     // データ内に該当日があるか確認
     return monthlyData.some(record => record.date === dateStr);
   } catch (e) {
-    console.error('日付確認エラー:', e);
     return false;
   }
 }

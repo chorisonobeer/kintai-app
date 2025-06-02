@@ -130,7 +130,7 @@ const MonthlyView: React.FC = () => {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       }
     } catch (e) {
-      console.error('日付変換エラー:', e, dateStr);
+      // 日付変換エラーは無視
     }
 
     // 変換に失敗した場合は元の文字列を返すか、エラーを示す値を返す
@@ -217,7 +217,6 @@ const MonthlyView: React.FC = () => {
       console.warn('未対応の勤務時間形式:', workTimeStr);
       return workTimeStr; // または '-' など
     } catch (e) {
-      console.error('勤務時間フォーマットエラー:', e, workTimeStr);
       return '-';
     }
   };
@@ -278,7 +277,6 @@ const MonthlyView: React.FC = () => {
       // その他の形式では0を返す
       return 0;
     } catch (e) {
-      console.error('勤務時間計算エラー:', e, workTimeStr);
       return 0;
     }
   };
@@ -289,7 +287,7 @@ const MonthlyView: React.FC = () => {
     try {
       await refreshData();
     } catch (error) {
-      console.error('データ更新エラー:', error);
+      // データ更新エラーは無視
     } finally {
       setTimeout(() => setIsRefreshing(false), 1000); // 視覚的フィードバック用
     }
