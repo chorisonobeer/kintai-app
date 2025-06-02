@@ -5,7 +5,6 @@
  */
 import React, { useState } from 'react';
 import { useKintai } from '../contexts/KintaiContext';
-import { formatBreakTimeFromMinutes } from '../utils/dateUtils';
 
 const MonthlyView: React.FC = () => {
   const {
@@ -222,6 +221,48 @@ const MonthlyView: React.FC = () => {
   };
 
   /**
+   * 休憩時間の表示フォーマット
+   * 数値（分）、文字列（HH:mm）、undefined/null に対応
+   */
+  const formatBreakTime = (breakTime: number | string | undefined | null): string => {
+    // undefinedやnullの場合は空文字を返す
+    if (breakTime === undefined || breakTime === null) return '';
+    
+    // 0の場合は「0:00」を表示
+    if (breakTime === 0 || breakTime === '0' || breakTime === '0:00') return '0:00';
+    
+    // 既に文字列でHH:mm形式の場合はそのまま返す
+    if (typeof breakTime === 'string') {
+      const timeMatch = breakTime.match(/^(\d{1,2}):(\d{2})$/);
+      if (timeMatch) {
+        return `${timeMatch[1]}:${timeMatch[2]}`;
+      }
+      
+      // 文字列だが数値として解釈できる場合は分数として処理
+      const numericValue = parseInt(breakTime, 10);
+      if (!isNaN(numericValue)) {
+        const hours = Math.floor(numericValue / 60);
+        const mins = numericValue % 60;
+        return `${hours}:${mins.toString().padStart(2, '0')}`;
+      }
+      
+      // その他の文字列形式は空文字を返す
+      return '';
+    }
+    
+    // 数値の場合は分数からHH:mm形式に変換
+    if (typeof breakTime === 'number') {
+      if (breakTime < 0) return '';
+      const hours = Math.floor(breakTime / 60);
+      const mins = breakTime % 60;
+      return `${hours}:${mins.toString().padStart(2, '0')}`;
+    }
+    
+    // その他の型の場合は空文字を返す
+    return '';
+  };
+
+  /**
    * 勤務時間文字列から分数を取得
    * 様々な形式に対応し、計算用に分数に変換
    */
@@ -383,8 +424,8 @@ const MonthlyView: React.FC = () => {
                     </td>
                     <td className="col-time">{formatTime(record.startTime)}</td>
                     <td className="col-time">{formatTime(record.endTime)}</td>
-                    {/* 休憩時間は分単位で保存されている想定。時:分形式に変換して表示 */}
-                    <td className="col-break">{formatBreakTimeFromMinutes(record.breakTime)}</td>
+                    {/* 休憩時間の表示処理 - 型に応じて適切にフォーマット */}
+                    <td className="col-break">{formatBreakTime(record.breakTime)}</td>
                     <td className="col-worktime">{formatWorkTime(record.workingTime)}</td>
                     <td className="col-location">{record.location || '-'}</td>
                   </tr>
