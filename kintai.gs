@@ -162,7 +162,7 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       });
     }
     
-    // 勤務時間の計算
+    // 勤務時間の計算（診断情報用のみ、スプレッドシートには書き込まない）
     diagInfo.stage = 'calc_working_time';
     /** @type {string|number} */
     let workingTime = 0;
@@ -200,7 +200,7 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       /** @type {number} */
       const totalMinutes = endMinutes - startMinutes - breakMinutes;
       
-      // 勤務時間を時:分形式で計算
+      // 勤務時間を時:分形式で計算（診断情報用のみ）
       if (totalMinutes > 0) {
         /** @type {number} */
         const workHours = Math.floor(totalMinutes / 60);
@@ -244,7 +244,8 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       diagInfo.monthValue = monthValue;
       
       // データを準備（スプレッドシートの列に合わせる）
-      // A列: 日付、B列: 月、C列: 出勤時間、D列: 休憩時間、E列: 退勤時間、F列: 勤務時間、G列: 勤務場所
+      // A列: 日付、B列: 月、C列: 出勤時間、D列: 休憩時間、E列: 退勤時間、G列: 勤務場所
+      // F列: 勤務時間は数式が入っているため書き込み禁止
       /** @type {(string|number)[]} */
       const rowData = [
         normalizedDate, // A列: 日付（YYYY/MM/DD形式）
@@ -252,13 +253,19 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
         startTime,      // C列: 出勤時間
         formatBreakTime(breakTime), // D列: 休憩時間（0:30形式）
         endTime,        // E列: 退勤時間
-        workingTime,    // F列: 計算された勤務時間（HH:mm形式）
-        location || ''  // G列: 勤務場所
+        location || ''  // G列: 勤務場所（F列をスキップ）
       ];
       
       // スプレッドシートに勤怠データを保存
-      // 計算された勤務時間をF列に正しく保存
-      sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+      // F列（勤務時間）は数式が入っているため書き込みをスキップ
+      // A-E列とG列のみ書き込み
+      const range = sheet.getRange(rowIndex, 1, 1, 5); // A-E列
+      range.setValues([rowData.slice(0, 5)]);
+      
+      // G列（勤務場所）を別途書き込み
+      if (location) {
+        sheet.getRange(rowIndex, 7, 1, 1).setValue(location);
+      }
       diagInfo.updated = true;
       diagInfo.rowUpdated = rowIndex;
       
