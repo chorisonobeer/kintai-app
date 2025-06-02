@@ -403,12 +403,11 @@ const KintaiForm: React.FC = () => {
       )}
       
       {/* 出勤時間 */}
-      <div>
         <MobileTimePicker 
           label="出勤時間" 
           value={startTime} 
           onChange={handleStartTimeChange} 
-          disabled={formState.isSaved && !formState.isEditing}
+          disabled={(formState.isSaved && !formState.isEditing) || isVeryOldDate()}
         />
         {errors.startTime && <div className="error-message">{errors.startTime}</div>}
         
@@ -416,7 +415,7 @@ const KintaiForm: React.FC = () => {
         <MobileBreakPicker
           value={breakTime}
           onChange={handleBreakTimeChange}
-          disabled={formState.isSaved && !formState.isEditing}
+          disabled={(formState.isSaved && !formState.isEditing) || isVeryOldDate()}
         />
         {errors.breakTime && <div className="error-message">{errors.breakTime}</div>}
         
@@ -425,7 +424,7 @@ const KintaiForm: React.FC = () => {
           label="退勤時間" 
           value={endTime} 
           onChange={handleEndTimeChange} 
-          disabled={formState.isSaved && !formState.isEditing}
+          disabled={(formState.isSaved && !formState.isEditing) || isVeryOldDate()}
         />
         {errors.endTime && <div className="error-message">{errors.endTime}</div>}
         
@@ -443,8 +442,8 @@ const KintaiForm: React.FC = () => {
           <select 
             value={location} 
             onChange={handleLocationChange}
-            disabled={formState.isSaved && !formState.isEditing}
-            className={`location-select ${!(formState.isSaved && !formState.isEditing) ? 'location-input-enabled' : ''}`}
+            disabled={(formState.isSaved && !formState.isEditing) || isVeryOldDate()}
+            className={`location-select ${!((formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? 'location-input-enabled' : ''}`}
           >
             <option value="">未選択</option>
             <option value="田んぼ">田んぼ</option>
@@ -453,7 +452,6 @@ const KintaiForm: React.FC = () => {
             <option value="その他">その他</option>
           </select>
         </div>
-      </div>
       
       {/* エラーメッセージ */}
       {errors.general && <div className="error-message">{errors.general}</div>}
