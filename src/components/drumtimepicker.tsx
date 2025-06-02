@@ -44,7 +44,6 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({ options, value, onChang
     if (!isScrolling) {
       const initialIndex = options.indexOf(value);
       const safeIndex = initialIndex >= 0 ? initialIndex : 0;
-      console.log('DrumPickerItem useEffect initial scroll:', { value, initialIndex, safeIndex, options: options.slice(0, 5) });
       scrollToIndex(safeIndex);
     }
   }, [value, options, scrollToIndex, isScrolling]);
@@ -67,11 +66,8 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({ options, value, onChang
         const index = Math.floor((scrollTop + itemHeight * 0.5) / itemHeight);
         const clampedIndex = Math.max(0, Math.min(index, options.length - 1));
         
-        console.log('DrumPickerItem handleScroll:', { scrollTop, index, clampedIndex, selectedOption: options[clampedIndex], currentValue: value });
-        
         // Update value if changed
         if (options[clampedIndex] !== value) {
-          console.log('DrumPickerItem updating value:', { from: value, to: options[clampedIndex] });
           onChange(options[clampedIndex]);
         }
         
@@ -95,7 +91,6 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({ options, value, onChang
 
   const handleItemClick = (option: string, index: number) => {
     if (disabled) return;
-    console.log('DrumTimePicker handleItemClick:', { option, index, currentValue: value });
     onChange(option);
     scrollToIndex(index, true);
   };
@@ -111,9 +106,6 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({ options, value, onChang
         <div className="drum-picker-padding"></div>
         {options.map((option, index) => {
           const isSelected = option === value;
-          if (index < 5) {
-            console.log('DrumPickerItem render option:', { option, value, isSelected, index });
-          }
           return (
             <div
               key={option}
@@ -140,13 +132,11 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({ label, value, onChange,
 
   const handleHourChange = (newHour: string) => {
     const newTime = `${newHour}:${minutes}`;
-    console.log('DrumTimePicker handleHourChange:', { newHour, minutes, newTime, currentValue: value });
     onChange(newTime);
   };
 
   const handleMinuteChange = (newMinute: string) => {
     const newTime = `${hours}:${newMinute}`;
-    console.log('DrumTimePicker handleMinuteChange:', { hours, newMinute, newTime, currentValue: value });
     onChange(newTime);
   };
 

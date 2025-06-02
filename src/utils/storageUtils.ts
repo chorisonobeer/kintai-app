@@ -17,7 +17,7 @@ export const saveKintaiData = (data: KintaiData): void => {
     const key = getStorageKey(data.date);
     localStorage.setItem(key, JSON.stringify(data));
   } catch (error) {
-    console.error('保存中にエラーが発生しました:', error);
+    // 保存エラーは無視
   }
 };
 
@@ -30,7 +30,6 @@ export const getKintaiData = (date: string): KintaiData | null => {
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error('データ取得中にエラーが発生しました:', error);
     return null;
   }
 };
@@ -50,6 +49,6 @@ export const deleteKintaiData = (date: string): void => {
     const key = getStorageKey(date);
     localStorage.removeItem(key);
   } catch (error) {
-    console.error('データ削除中にエラーが発生しました:', error);
+    // 削除エラーは無視
   }
 };

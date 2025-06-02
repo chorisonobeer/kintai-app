@@ -52,7 +52,6 @@ const MonthlyView: React.FC = () => {
       const days = ['日', '月', '火', '水', '木', '金', '土'];
       return days[date.getDay()];
     } catch (e) {
-      console.error('曜日取得エラー:', e);
       return '';
     }
   };
@@ -92,7 +91,6 @@ const MonthlyView: React.FC = () => {
       const dayOfWeek = getDayOfWeekName(dateStr);
       return `${date.getDate()}（${dayOfWeek}）`;
     } catch (e) {
-      console.error('日付フォーマットエラー:', e, dateStr);
       return 'エラー';
     }
   };

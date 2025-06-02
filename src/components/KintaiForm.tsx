@@ -203,13 +203,7 @@ const KintaiForm: React.FC = () => {
           console.log('[KintaiForm] Fetched data from getKintaiDataByDate:', data);
 
           if (data) {
-            console.log('[DEBUG] KintaiForm - 取得したデータの詳細:');
-            console.log('[DEBUG] KintaiForm - 日付:', data.date);
-            console.log('[DEBUG] KintaiForm - 出勤時間(C列):', data.startTime, 'type:', typeof data.startTime);
-            console.log('[DEBUG] KintaiForm - 休憩時間(D列):', data.breakTime, 'type:', typeof data.breakTime);
-            console.log('[DEBUG] KintaiForm - 退勤時間(E列):', data.endTime, 'type:', typeof data.endTime);
-            console.log('[DEBUG] KintaiForm - 勤務時間(F列):', data.workingTime, 'type:', typeof data.workingTime);
-            console.log('[DEBUG] KintaiForm - 勤務場所(G列):', data.location, 'type:', typeof data.location);
+            // データの詳細をログ出力
             
             // 出勤時間が入力されている場合のみ保存済みとして扱う
             // 空文字や未定義は未入力として扱う
@@ -224,12 +218,12 @@ const KintaiForm: React.FC = () => {
             let breakTimeAsString = ''; 
             if (data.breakTime !== undefined && typeof data.breakTime === 'string') {
                 breakTimeAsString = data.breakTime;
-                console.log('[DEBUG] KintaiForm - 休憩時間を文字列として設定:', breakTimeAsString);
+                // 休憩時間を文字列として設定
             } else if (data.breakTime !== undefined) {
                 // 万が一文字列でない場合 (apiServiceの変換が失敗した場合など)
-                console.warn(`[DEBUG] KintaiForm - 休憩時間が文字列ではありません: ${data.breakTime}, type: ${typeof data.breakTime}. 空文字に設定します。`);
+                // 休憩時間が文字列でない場合は空文字に設定
             } else {
-                console.log('[DEBUG] KintaiForm - 休憩時間がundefinedのため空文字に設定します。');
+                // 休憩時間がundefinedのため空文字に設定
             }
             // data.breakTime が undefined の場合は空文字を使用（空表示）
             setBreakTime(breakTimeAsString);
@@ -240,13 +234,7 @@ const KintaiForm: React.FC = () => {
             // 保存済みデータの場合は、サーバーから取得した勤務時間を使用
             setWorkingTime(data.workingTime || '');
 
-            console.log('[DEBUG] KintaiForm - フォームに設定した値:', { 
-              startTime: data.startTime, 
-              breakTime: breakTimeAsString, 
-              endTime: data.endTime, 
-              location: data.location,
-              workingTime: data.workingTime
-            });
+            // フォームに値を設定完了
 
           } else {
             console.log('[KintaiForm] No data found by getKintaiDataByDate, resetting to initial values.');

@@ -43,7 +43,7 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const data = await getMonthlyData(year, month, forceRefresh);
       setMonthlyData(data);
     } catch (error) {
-      console.error('月間データ取得エラー:', error);
+      setMonthlyData([]);
     } finally {
       setIsDataLoading(false);
     }

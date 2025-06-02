@@ -32,7 +32,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       }
     } catch (err) {
       setError('通信エラーが発生しました');
-      console.error('Login error:', err);
     } finally {
       setIsLoading(false);
     }

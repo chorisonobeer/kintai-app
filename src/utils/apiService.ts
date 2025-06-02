@@ -68,10 +68,7 @@ async function callGAS<T = unknown>(
 
   const json = await res.json() as ApiResp<T>;
 
-  console.groupCollapsed(`[GAS] ${action}`);
-  console.log('status:', res.status);
-  console.log('json  :', json);
-  console.groupEnd();
+
 
   /* ---------- 型安全にエラーチェック ---------- */
   const okFlag = (json as ApiOk<T>).success === true || (json as ApiOk<T>).ok === true;
@@ -321,7 +318,7 @@ function extractHHMM(timeValue: string | Date | undefined): string {
     }
     return `${hours}:${minutes}`;
   } catch (e) {
-    console.warn(`[apiService] extractHHMM: Failed to parse timeValue "${timeValue}". Defaulting to empty string.`, e);
+    // 解析失敗時は空文字列を返す
     return ''; // パース失敗時のフォールバック
   }
 }
@@ -382,7 +379,7 @@ export async function getKintaiDataByDate(dateString: string): Promise<KintaiDat
     }
     return null;
   } catch (error) {
-    console.error(`[apiService] Error fetching KintaiData for date ${dateString}:`, error);
+    // データ取得エラーは無視
     return null; 
   }
 }
