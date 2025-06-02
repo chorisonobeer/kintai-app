@@ -244,23 +244,14 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       diagInfo.monthValue = monthValue;
       
       // データを準備（スプレッドシートの列に合わせる）
-      // A列: 日付、B列: 月、C列: 出勤時間、D列: 休憩時間、E列: 退勤時間、G列: 勤務場所
-      // F列: 勤務時間は数式が入っているため書き込み禁止
-      /** @type {(string|number)[]} */
-      const rowData = [
-        normalizedDate, // A列: 日付（YYYY/MM/DD形式）
-        monthValue,     // B列: 月（数値のみ）
-        startTime,      // C列: 出勤時間
-        formatBreakTime(breakTime), // D列: 休憩時間（0:30形式）
-        endTime,        // E列: 退勤時間
-        location || ''  // G列: 勤務場所（F列をスキップ）
-      ];
+      // C列: 出勤時間、D列: 休憩時間、E列: 退勤時間、G列: 勤務場所のみ書き込み
+      // A列（日付）、B列（月）、F列（勤務時間）は書き込み禁止
       
       // スプレッドシートに勤怠データを保存
-      // F列（勤務時間）は数式が入っているため書き込みをスキップ
-      // A-E列とG列のみ書き込み
-      const range = sheet.getRange(rowIndex, 1, 1, 5); // A-E列
-      range.setValues([rowData.slice(0, 5)]);
+      // C、D、E列のみ書き込み
+      sheet.getRange(rowIndex, 3, 1, 1).setValue(startTime); // C列: 出勤時間
+      sheet.getRange(rowIndex, 4, 1, 1).setValue(formatBreakTime(breakTime)); // D列: 休憩時間
+      sheet.getRange(rowIndex, 5, 1, 1).setValue(endTime); // E列: 退勤時間
       
       // G列（勤務場所）を別途書き込み
       if (location) {
