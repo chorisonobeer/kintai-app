@@ -108,12 +108,48 @@ export async function login(
   password: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // ログイン前に既存のlocalStorageを完全にクリア
+    console.log("=== LOGIN DEBUG ===");
+    console.log("ログイン前のlocalStorage状態:");
+    console.log("既存TOKEN_KEY:", localStorage.getItem(TOKEN_KEY));
+    console.log("既存USER_ID_KEY:", localStorage.getItem(USER_ID_KEY));
+    console.log("既存USER_NAME_KEY:", localStorage.getItem(USER_NAME_KEY));
+    console.log("既存SHEET_ID_KEY:", localStorage.getItem(SHEET_ID_KEY));
+    
+    // 既存の認証情報を完全にクリア
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_ID_KEY);
+    localStorage.removeItem(USER_NAME_KEY);
+    localStorage.removeItem(SHEET_ID_KEY);
+    
+    // セッションキャッシュもクリア
+    sessionStorage.removeItem(MONTHLY_DATA_KEY);
+    sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
+    clearMonthlyDataCache();
+    
+    console.log("既存データクリア完了");
+    
     const r = await callGAS<never>("login", { name, password });
 
+    console.log("入力された名前:", name);
+    console.log("GASからのレスポンス:", r);
+    console.log("保存されるuserName:", r.userName);
+    console.log("保存されるuserId:", r.userId);
+    console.log("保存されるspreadsheetId:", r.spreadsheetId);
+
+    // 新しい認証情報を保存
     localStorage.setItem(TOKEN_KEY, r.token as string);
     localStorage.setItem(USER_ID_KEY, r.userId as string);
     localStorage.setItem(USER_NAME_KEY, r.userName as string);
     localStorage.setItem(SHEET_ID_KEY, r.spreadsheetId as string);
+
+    // デバッグ: 保存後の値を確認
+    console.log("localStorage保存後の確認:");
+    console.log("TOKEN_KEY:", localStorage.getItem(TOKEN_KEY));
+    console.log("USER_ID_KEY:", localStorage.getItem(USER_ID_KEY));
+    console.log("USER_NAME_KEY:", localStorage.getItem(USER_NAME_KEY));
+    console.log("SHEET_ID_KEY:", localStorage.getItem(SHEET_ID_KEY));
+    console.log("===================");
 
     return { success: true };
   } catch (e) {
@@ -205,7 +241,15 @@ export async function getMonthlyData(
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
 
+  // デバッグ: データ取得時の認証情報を確認
+  console.log("=== GET MONTHLY DATA DEBUG ===");
+  console.log("取得対象:", year, "年", month, "月");
+  console.log("使用するuserId:", userId);
+  console.log("使用するspreadsheetId:", spreadsheetId);
+  console.log("現在のユーザー名:", localStorage.getItem(USER_NAME_KEY));
+
   if (!token || !spreadsheetId || !userId) {
+    console.log("認証情報不足エラー:", { token: !!token, spreadsheetId: !!spreadsheetId, userId: !!userId });
     throw new Error("認証情報が不足しています");
   }
 
@@ -216,17 +260,27 @@ export async function getMonthlyData(
   if (!forceRefresh) {
     const cachedData = getMonthlyDataFromCache(cacheKey);
     if (cachedData) {
+      console.log("キャッシュからデータを取得:", cachedData.length, "件");
       return cachedData;
     }
   }
 
   // キャッシュになければサーバーから取得
+  console.log("GASにリクエスト送信:", { spreadsheetId, userId, year, month });
 
   const r = await callGAS<KintaiRecord[]>(
     "getMonthlyData",
     { spreadsheetId, userId, year, month },
     true,
   );
+
+  // デバッグ: GASからのレスポンスを確認
+  console.log("GASからのレスポンス:", r);
+  console.log("取得したデータ件数:", (r.data as KintaiRecord[])?.length || 0);
+  if ((r.data as KintaiRecord[])?.length > 0) {
+    console.log("最初のレコード:", (r.data as KintaiRecord[])[0]);
+  }
+  console.log("==============================");
 
   // キャッシュに保存
   saveMonthlyDataToCache(cacheKey, r.data as KintaiRecord[]);
@@ -424,8 +478,26 @@ function formatDateForComparison(date: Date): string {
 }
 
 /* ========= ユーティリティ (isAuthenticated などはこちらに既に定義があります) ========= */
-export const isAuthenticated = (): boolean =>
-  localStorage.getItem(TOKEN_KEY) !== null;
+export const isAuthenticated = (): boolean => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const userId = localStorage.getItem(USER_ID_KEY);
+  const userName = localStorage.getItem(USER_NAME_KEY);
+  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
+  
+  // 全ての必要な認証情報が存在するかチェック
+  const isValid = token !== null && userId !== null && userName !== null && spreadsheetId !== null;
+  
+  // デバッグ: 認証状態を詳細ログ出力
+  console.log("=== 認証状態チェック ===");
+  console.log("TOKEN_KEY存在:", token !== null);
+  console.log("USER_ID_KEY存在:", userId !== null);
+  console.log("USER_NAME_KEY存在:", userName !== null);
+  console.log("SHEET_ID_KEY存在:", spreadsheetId !== null);
+  console.log("認証状態:", isValid ? "有効" : "無効");
+  console.log("=====================");
+  
+  return isValid;
+};
 
 export const getUserName = (): string | null =>
   localStorage.getItem(USER_NAME_KEY);
