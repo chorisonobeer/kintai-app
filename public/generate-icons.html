@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWAアイコン生成</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .icon-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .icon-item {
+            text-align: center;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .icon-item img {
+            display: block;
+            margin: 0 auto 10px;
+            border: 1px solid #eee;
+        }
+        button {
+            background: #303f9f;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1f2c7a;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>PWAアイコン生成ツール</h1>
+    <p>勤怠管理アプリ用のPWAアイコンを生成します。</p>
+    
+    <button onclick="generateAllIcons()">全アイコンを生成</button>
+    <button onclick="downloadAllIcons()">全アイコンをダウンロード</button>
+    
+    <div id="status"></div>
+    
+    <div class="icon-preview" id="iconPreview"></div>
+    
+    <script>
+        const iconSizes = [72, 96, 128, 144, 152, 192, 384, 512];
+        const svgContent = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+                <!-- 背景円 -->
+                <circle cx="256" cy="256" r="240" fill="#303f9f"/>
+                
+                <!-- 時計の文字盤 -->
+                <circle cx="256" cy="256" r="180" fill="#ffffff" stroke="#303f9f" stroke-width="8"/>
+                
+                <!-- 時計の針 -->
+                <line x1="256" y1="256" x2="256" y2="140" stroke="#303f9f" stroke-width="12" stroke-linecap="round"/>
+                <line x1="256" y1="256" x2="340" y2="256" stroke="#303f9f" stroke-width="8" stroke-linecap="round"/>
+                
+                <!-- 中心点 -->
+                <circle cx="256" cy="256" r="16" fill="#303f9f"/>
+                
+                <!-- 時計の目盛り -->
+                <g stroke="#303f9f" stroke-width="4">
+                    <line x1="256" y1="96" x2="256" y2="116"/>
+                    <line x1="416" y1="256" x2="396" y2="256"/>
+                    <line x1="256" y1="416" x2="256" y2="396"/>
+                    <line x1="96" y1="256" x2="116" y2="256"/>
+                </g>
+                
+                <!-- 勤怠管理を表すチェックマーク -->
+                <path d="M180 280 L220 320 L340 200" stroke="#4caf50" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+        `;
+        
+        let generatedIcons = {};
+        
+        function svgToPng(svgString, size) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                canvas.width = size;
+                canvas.height = size;
+                
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0, size, size);
+                    const pngDataUrl = canvas.toDataURL('image/png');
+                    resolve(pngDataUrl);
+                };
+                
+                const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+                const url = URL.createObjectURL(svgBlob);
+                img.src = url;
+            });
+        }
+        
+        async function generateAllIcons() {
+            const preview = document.getElementById('iconPreview');
+            const status = document.getElementById('status');
+            
+            preview.innerHTML = '';
+            status.style.display = 'block';
+            status.className = '';
+            status.textContent = 'アイコンを生成中...';
+            
+            for (const size of iconSizes) {
+                try {
+                    const pngDataUrl = await svgToPng(svgContent, size);
+                    generatedIcons[size] = pngDataUrl;
+                    
+                    const iconItem = document.createElement('div');
+                    iconItem.className = 'icon-item';
+                    iconItem.innerHTML = `
+                        <img src="${pngDataUrl}" width="${Math.min(size, 128)}" height="${Math.min(size, 128)}" alt="Icon ${size}x${size}">
+                        <div>${size}x${size}px</div>
+                        <button onclick="downloadIcon(${size})">ダウンロード</button>
+                    `;
+                    preview.appendChild(iconItem);
+                } catch (error) {
+                    console.error(`Error generating ${size}x${size} icon:`, error);
+                }
+            }
+            
+            status.className = 'success';
+            status.textContent = `${iconSizes.length}個のアイコンが生成されました！`;
+        }
+        
+        function downloadIcon(size) {
+            if (generatedIcons[size]) {
+                const link = document.createElement('a');
+                link.download = `icon-${size}x${size}.png`;
+                link.href = generatedIcons[size];
+                link.click();
+            }
+        }
+        
+        function downloadAllIcons() {
+            if (Object.keys(generatedIcons).length === 0) {
+                alert('まずアイコンを生成してください。');
+                return;
+            }
+            
+            iconSizes.forEach(size => {
+                if (generatedIcons[size]) {
+                    setTimeout(() => downloadIcon(size), size * 10); // 少し間隔を空けてダウンロード
+                }
+            });
+        }
+        
+        // ページ読み込み時に自動生成
+        window.onload = function() {
+            generateAllIcons();
+        };
+    </script>
+</body>
+</html>

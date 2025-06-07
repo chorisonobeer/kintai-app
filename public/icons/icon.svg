@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- 背景円 -->
+  <circle cx="256" cy="256" r="240" fill="#303f9f"/>
+  
+  <!-- 時計の文字盤 -->
+  <circle cx="256" cy="256" r="180" fill="#ffffff" stroke="#303f9f" stroke-width="8"/>
+  
+  <!-- 時計の針 -->
+  <line x1="256" y1="256" x2="256" y2="140" stroke="#303f9f" stroke-width="12" stroke-linecap="round"/>
+  <line x1="256" y1="256" x2="340" y2="256" stroke="#303f9f" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- 中心点 -->
+  <circle cx="256" cy="256" r="16" fill="#303f9f"/>
+  
+  <!-- 時計の目盛り -->
+  <g stroke="#303f9f" stroke-width="4">
+    <line x1="256" y1="96" x2="256" y2="116"/>
+    <line x1="416" y1="256" x2="396" y2="256"/>
+    <line x1="256" y1="416" x2="256" y2="396"/>
+    <line x1="96" y1="256" x2="116" y2="256"/>
+  </g>
+  
+  <!-- 勤怠管理を表すチェックマーク -->
+  <path d="M180 280 L220 320 L340 200" stroke="#4caf50" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
