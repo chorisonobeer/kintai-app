@@ -37,6 +37,7 @@ interface ApiOk<T = unknown> {
   spreadsheetId?: string;
   data?: T;
   debug?: unknown;
+  version?: string;
 }
 
 interface ApiErr {
@@ -45,9 +46,23 @@ interface ApiErr {
   error?: string;
   err?: string;
   debug?: unknown;
+  version?: string;
 }
 
 type ApiResp<T = unknown> = ApiOk<T> | ApiErr;
+
+/* ========= バージョン関連型 ========= */
+export interface VersionInfo {
+  version: string;
+  timestamp: string;
+  description: string;
+}
+
+export interface VersionHistoryItem {
+  version: string;
+  date: string;
+  description: string;
+}
 
 /* ========= fetch ラッパ ========= */
 async function callGAS<T = unknown>(
@@ -68,7 +83,10 @@ async function callGAS<T = unknown>(
 
   const json = await res.json() as ApiResp<T>;
 
-
+  // バージョン情報をローカルストレージに保存
+  if (json.version) {
+    localStorage.setItem('kintai_server_version', json.version);
+  }
 
   /* ---------- 型安全にエラーチェック ---------- */
   const okFlag = (json as ApiOk<T>).success === true || (json as ApiOk<T>).ok === true;
@@ -84,11 +102,11 @@ async function callGAS<T = unknown>(
 
 /* ========= login ========= */
 export async function login(
-  email: string,
+  name: string,
   password: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const r = await callGAS<never>('login', { email, password });
+    const r = await callGAS<never>('login', { name, password });
 
     localStorage.setItem(TOKEN_KEY,     r.token as string);
     localStorage.setItem(USER_ID_KEY,   r.userId as string);
@@ -416,29 +434,63 @@ export const getUserId = (): string | null =>
 export const getSpreadsheetId = (): string | null =>
   localStorage.getItem(SHEET_ID_KEY);
 
-// ここから下の重複している定義を削除します
-/* ========= isEnteredDate ========= */
-// export async function isEnteredDate(date: Date): Promise<boolean> { // 削除
-//   try {
-//     const year = date.getFullYear();
-//     const month = date.getMonth() + 1;
-    
-//     // 日付文字列を取得（形式: YYYY-MM-DD）
-//     const dateStr = formatDateForComparison(date);
-    
-//     // 該当月のデータを取得
-//     const monthlyData = await getMonthlyData(year, month);
-    
-//     // データ内に該当日があるか確認
-//     return monthlyData.some(record => record.date === dateStr);
-//   } catch (e) {
-//     console.error('日付確認エラー:', e);
-//     return false;
-//   }
-// }
+/* ========= バージョン管理 ========= */
+/**
+ * サーバーのバージョン情報を取得
+ */
+export async function getVersionInfo(): Promise<VersionInfo> {
+  const response = await callGAS<VersionInfo>('getVersion');
+  return response.data as VersionInfo;
+}
 
-// // 比較用の日付フォーマット（YYYY-MM-DD）
-// function formatDateForComparison(date: Date): string { // 削除 (ただし、isEnteredDate の中で使われているので、isEnteredDate を削除するならこれも不要)
+/**
+ * サーバーのバージョン履歴を取得
+ */
+export async function getVersionHistory(): Promise<VersionHistoryItem[]> {
+  const response = await callGAS<VersionHistoryItem[]>('getVersionHistory');
+  return response.data as VersionHistoryItem[];
+}
+
+/**
+ * ローカルストレージからサーバーバージョンを取得
+ */
+export const getServerVersion = (): string | null =>
+  localStorage.getItem('kintai_server_version');
+
+/**
+ * クライアントバージョンを取得（package.jsonから）
+ */
+export const getClientVersion = (): string => {
+  // 実際のプロジェクトではpackage.jsonから取得するが、
+  // ここでは固定値を返す
+  return '0.1.0';
+};
+
+/**
+ * バージョン互換性チェック
+ */
+export const checkVersionCompatibility = (): { compatible: boolean; message?: string } => {
+  const serverVersion = getServerVersion();
+  const clientVersion = getClientVersion();
+  
+  if (!serverVersion) {
+    return { compatible: true }; // サーバーバージョンが不明な場合は互換性ありとする
+  }
+  
+  // 簡単なバージョン互換性チェック
+  // 実際のプロジェクトではより詳細なチェックを実装
+  const serverMajor = parseInt(serverVersion.split('-')[0].replace('v', ''));
+  const clientMajor = parseInt(clientVersion.split('.')[0]);
+  
+  if (Math.abs(serverMajor - clientMajor * 10) > 5) {
+    return {
+      compatible: false,
+      message: `バージョンの互換性に問題があります。サーバー: ${serverVersion}, クライアント: ${clientVersion}`
+    };
+  }
+  
+  return { compatible: true };
+};
 //   const year = date.getFullYear();
 //   const month = (date.getMonth() + 1).toString().padStart(2, '0');
 //   const day = date.getDate().toString().padStart(2, '0');

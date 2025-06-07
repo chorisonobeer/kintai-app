@@ -6,7 +6,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -14,8 +14,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
-      setError('メールアドレスとパスワードを入力してください');
+    if (!name || !password) {
+      setError('名前とパスワードを入力してください');
       return;
     }
 
@@ -23,7 +23,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     try {
-      const result = await login(email, password);
+      const result = await login(name, password);
       
       if (result.success) {
         onLoginSuccess();
@@ -45,15 +45,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="email">メールアドレス</label>
+          <label htmlFor="name">名前</label>
           <div className="input-wrapper">
             <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               disabled={isLoading}
-              autoComplete="username"
+              autoComplete="name"
               className="login-input"
             />
           </div>

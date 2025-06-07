@@ -7,7 +7,7 @@
  */
 
 const GAS_API_URL =
-  'https://script.google.com/macros/s/AKfycbwViNC0mNfASjQDCVBcN-Dahrvs2mZJREsyYQkVY9OeuAYwy3Xn80ixv5lg9A5jZHbFEg/exec';
+  'https://script.google.com/macros/s/AKfycbzW33cRCB_rYdRx-bNQhj-2pghluHl09_iu26As9Xm7f7PIEoRk2B_42ubLYO6kKpid4w/exec';
 
 export async function handler(event) {
   const cors = {
