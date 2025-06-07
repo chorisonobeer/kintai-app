@@ -3,25 +3,25 @@
  * 2025-01-20T10:00:00+09:00
  * 変更概要: 日付移動機能（＜＞ボタン）を追加
  */
-import React, { useState, useEffect } from 'react';
-import DatePicker, { registerLocale } from 'react-datepicker';
-import { ja } from 'date-fns/locale';
-import 'react-datepicker/dist/react-datepicker.css';
+import React, { useState, useEffect } from "react";
+import DatePicker, { registerLocale } from "react-datepicker";
+import { ja } from "date-fns/locale";
+import "react-datepicker/dist/react-datepicker.css";
 
 // 日本語ロケールを登録
-registerLocale('ja', ja);
+registerLocale("ja", ja);
 
 interface MobileDatePickerProps {
   value: string; // YYYY-MM-DD 形式
   onChange: (date: string) => void;
   disabled?: boolean;
-  selectableDates?: { value: string; label: string }[]; 
+  selectableDates?: { value: string; label: string }[];
 }
 
-const MobileDatePicker: React.FC<MobileDatePickerProps> = ({ 
-  value, 
-  onChange, 
-  disabled = false
+const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
+  value,
+  onChange,
+  disabled = false,
 }) => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -38,17 +38,17 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
     if (date) {
       // YYYY-MM-DD 形式の文字列で onChange を呼び出す
       const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
       onChange(`${year}-${month}-${day}`);
     }
   };
 
   // 表示用の日付フォーマット
   const formatDisplayDate = (dateStr: string) => {
-    if (!dateStr) return '';
+    if (!dateStr) return "";
     const date = new Date(dateStr);
-    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
   };
 
   // 前の日に移動
@@ -72,10 +72,10 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
   return (
     <div className="form-group date-picker-group">
       <label>日付</label>
-      
+
       <div className="month-control">
         <div className="month-selector">
-          <button 
+          <button
             type="button"
             className="month-nav-button"
             onClick={handlePreviousDay}
@@ -84,7 +84,7 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
           >
             ＜
           </button>
-          
+
           {disabled ? (
             <h2 className="date-display">{formatDisplayDate(value)}</h2>
           ) : (
@@ -98,8 +98,8 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
               disabled={disabled}
             />
           )}
-          
-          <button 
+
+          <button
             type="button"
             className="month-nav-button"
             onClick={handleNextDay}

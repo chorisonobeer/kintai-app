@@ -9,20 +9,20 @@
  *  ──────────────────────────────────────────────────────────
  */
 
-import { KintaiData, KintaiRecord } from '../types';
-import { formatBreakTimeFromMinutes } from './dateUtils';
+import { KintaiData, KintaiRecord } from "../types";
+import { formatBreakTimeFromMinutes } from "./dateUtils";
 
 /* ========= 定数 ========= */
-const FUNC_URL        = '/.netlify/functions/kintai-api';
+const FUNC_URL = "/.netlify/functions/kintai-api";
 
-const TOKEN_KEY       = 'kintai_token';
-const USER_ID_KEY     = 'kintai_user_id';
-const USER_NAME_KEY   = 'kintai_user_name';
-const SHEET_ID_KEY    = 'kintai_spreadsheet_id';
+const TOKEN_KEY = "kintai_token";
+const USER_ID_KEY = "kintai_user_id";
+const USER_NAME_KEY = "kintai_user_name";
+const SHEET_ID_KEY = "kintai_spreadsheet_id";
 
 // 月間データをセッションストレージに保存するためのキー
-const MONTHLY_DATA_KEY = 'kintai_monthly_data';
-const MONTHLY_DATA_TIMESTAMP_KEY = 'kintai_monthly_data_timestamp';
+const MONTHLY_DATA_KEY = "kintai_monthly_data";
+const MONTHLY_DATA_TIMESTAMP_KEY = "kintai_monthly_data_timestamp";
 
 /* 開発時の可視化フラグ */
 const DEBUG_MODE = true;
@@ -66,35 +66,37 @@ export interface VersionHistoryItem {
 
 /* ========= fetch ラッパ ========= */
 async function callGAS<T = unknown>(
-  action:  string,
+  action: string,
   payload: object = {},
-  withToken = false
+  withToken = false,
 ): Promise<ApiOk<T>> {
-
   const body: Record<string, unknown> = { action, payload };
   if (withToken) body.token = localStorage.getItem(TOKEN_KEY);
   if (DEBUG_MODE) body.debug = true;
 
-  const res  = await fetch(FUNC_URL, {
-    method : 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body   : JSON.stringify(body)
+  const res = await fetch(FUNC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 
-  const json = await res.json() as ApiResp<T>;
+  const json = (await res.json()) as ApiResp<T>;
 
   // バージョン情報をローカルストレージに保存
   if (json.version) {
-    localStorage.setItem('kintai_server_version', json.version);
+    localStorage.setItem("kintai_server_version", json.version);
   }
 
   /* ---------- 型安全にエラーチェック ---------- */
-  const okFlag = (json as ApiOk<T>).success === true || (json as ApiOk<T>).ok === true;
+  const okFlag =
+    (json as ApiOk<T>).success === true || (json as ApiOk<T>).ok === true;
   if (!okFlag) {
     const msg =
-      typeof (json as ApiErr).error === 'string' ? (json as ApiErr).error :
-      typeof (json as ApiErr).err   === 'string' ? (json as ApiErr).err   :
-      'API error';
+      typeof (json as ApiErr).error === "string"
+        ? (json as ApiErr).error
+        : typeof (json as ApiErr).err === "string"
+          ? (json as ApiErr).err
+          : "API error";
     throw new Error(msg);
   }
   return json as ApiOk<T>;
@@ -103,15 +105,15 @@ async function callGAS<T = unknown>(
 /* ========= login ========= */
 export async function login(
   name: string,
-  password: string
+  password: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const r = await callGAS<never>('login', { name, password });
+    const r = await callGAS<never>("login", { name, password });
 
-    localStorage.setItem(TOKEN_KEY,     r.token as string);
-    localStorage.setItem(USER_ID_KEY,   r.userId as string);
+    localStorage.setItem(TOKEN_KEY, r.token as string);
+    localStorage.setItem(USER_ID_KEY, r.userId as string);
     localStorage.setItem(USER_NAME_KEY, r.userName as string);
-    localStorage.setItem(SHEET_ID_KEY,  r.spreadsheetId as string);
+    localStorage.setItem(SHEET_ID_KEY, r.spreadsheetId as string);
 
     return { success: true };
   } catch (e) {
@@ -122,13 +124,13 @@ export async function login(
 /* ========= logout ========= */
 export async function logout(): Promise<void> {
   try {
-    await callGAS('logout', {}, true);
+    await callGAS("logout", {}, true);
   } finally {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_ID_KEY);
     localStorage.removeItem(USER_NAME_KEY);
     localStorage.removeItem(SHEET_ID_KEY);
-    
+
     // 月間データのキャッシュもクリア
     sessionStorage.removeItem(MONTHLY_DATA_KEY);
     sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
@@ -137,55 +139,58 @@ export async function logout(): Promise<void> {
 
 /* ========= saveKintai ========= */
 export async function saveKintaiToServer(
-  data: KintaiData // KintaiData型は { date: string; startTime: string; breakTime: string; endTime: string; location?: string; }
+  data: KintaiData, // KintaiData型は { date: string; startTime: string; breakTime: string; endTime: string; location?: string; }
 ): Promise<{ success: boolean; error?: string }> {
-  const token         = localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
-  const userId        = localStorage.getItem(USER_ID_KEY);
+  const userId = localStorage.getItem(USER_ID_KEY);
 
   if (!token || !spreadsheetId || !userId) {
-    return { success:false, error:'ログイン情報が不足しています' };
+    return { success: false, error: "ログイン情報が不足しています" };
   }
 
   try {
     // 送信するペイロードには、date, startTime, breakTime (HH:mm形式), endTime, location のみ含まれる
     // F列に相当する「計算された勤務時間」はフロントエンドからは送信していない
-    await callGAS('saveKintai', { 
-      date: data.date,
-      startTime: data.startTime, // "HH:mm"
-      breakTime: data.breakTime, // string (HH:mm)
-      endTime: data.endTime,     // "HH:mm"
-      location: data.location || '',
-      spreadsheetId, 
-      userId 
-    }, true);
-    
+    await callGAS(
+      "saveKintai",
+      {
+        date: data.date,
+        startTime: data.startTime, // "HH:mm"
+        breakTime: data.breakTime, // string (HH:mm)
+        endTime: data.endTime, // "HH:mm"
+        location: data.location || "",
+        spreadsheetId,
+        userId,
+      },
+      true,
+    );
+
     clearMonthlyDataCache();
-    
+
     return { success: true };
   } catch (e) {
-    return { success:false, error:(e as Error).message };
+    return { success: false, error: (e as Error).message };
   }
 }
 
 /* ========= getHistory ========= */
 export async function getKintaiHistory(
   year: number,
-  month: number
+  month: number,
 ): Promise<KintaiRecord[]> {
-
-  const token         = localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
-  const userId        = localStorage.getItem(USER_ID_KEY);
+  const userId = localStorage.getItem(USER_ID_KEY);
 
   if (!token || !spreadsheetId || !userId) {
-    throw new Error('認証情報が不足しています');
+    throw new Error("認証情報が不足しています");
   }
 
   const r = await callGAS<KintaiRecord[]>(
-    'getHistory',
+    "getHistory",
     { spreadsheetId, userId, year, month },
-    true
+    true,
   );
   return r.data as KintaiRecord[];
 }
@@ -193,40 +198,39 @@ export async function getKintaiHistory(
 /* ========= getMonthlyData ========= */
 export async function getMonthlyData(
   year: number,
-  month: number, 
-  forceRefresh = false
+  month: number,
+  forceRefresh = false,
 ): Promise<KintaiRecord[]> {
-  const token         = localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
-  const userId        = localStorage.getItem(USER_ID_KEY);
+  const userId = localStorage.getItem(USER_ID_KEY);
 
   if (!token || !spreadsheetId || !userId) {
-    throw new Error('認証情報が不足しています');
+    throw new Error("認証情報が不足しています");
   }
-  
+
   // キャッシュキー
   const cacheKey = `${year}-${month}`;
-  
+
   // 既存のキャッシュをチェック（強制更新フラグがOFFの場合）
   if (!forceRefresh) {
     const cachedData = getMonthlyDataFromCache(cacheKey);
     if (cachedData) {
-
       return cachedData;
     }
   }
-  
+
   // キャッシュになければサーバーから取得
 
   const r = await callGAS<KintaiRecord[]>(
-    'getMonthlyData',
+    "getMonthlyData",
     { spreadsheetId, userId, year, month },
-    true
+    true,
   );
-  
+
   // キャッシュに保存
   saveMonthlyDataToCache(cacheKey, r.data as KintaiRecord[]);
-  
+
   return r.data as KintaiRecord[];
 }
 
@@ -236,23 +240,26 @@ function getMonthlyDataFromCache(cacheKey: string): KintaiRecord[] | null {
   try {
     const cachedDataJson = sessionStorage.getItem(MONTHLY_DATA_KEY);
     if (!cachedDataJson) return null;
-    
+
     const cachedDataMap = JSON.parse(cachedDataJson);
     const cachedData = cachedDataMap[cacheKey];
-    
+
     if (!cachedData) return null;
-    
+
     // キャッシュ期限チェック（30分）
-    const timestamp = parseInt(sessionStorage.getItem(MONTHLY_DATA_TIMESTAMP_KEY + '_' + cacheKey) || '0', 10);
+    const timestamp = parseInt(
+      sessionStorage.getItem(MONTHLY_DATA_TIMESTAMP_KEY + "_" + cacheKey) ||
+        "0",
+      10,
+    );
     const now = Date.now();
     const cacheAge = now - timestamp;
-    
+
     // 30分以上経過していたらキャッシュ無効
     if (cacheAge > 30 * 60 * 1000) {
-
       return null;
     }
-    
+
     return cachedData;
   } catch (e) {
     return null;
@@ -265,15 +272,16 @@ function saveMonthlyDataToCache(cacheKey: string, data: KintaiRecord[]): void {
     // 既存のキャッシュを取得
     const cachedDataJson = sessionStorage.getItem(MONTHLY_DATA_KEY);
     const cachedDataMap = cachedDataJson ? JSON.parse(cachedDataJson) : {};
-    
+
     // 新しいデータを追加
     cachedDataMap[cacheKey] = data;
-    
+
     // キャッシュを保存
     sessionStorage.setItem(MONTHLY_DATA_KEY, JSON.stringify(cachedDataMap));
-    sessionStorage.setItem(MONTHLY_DATA_TIMESTAMP_KEY + '_' + cacheKey, Date.now().toString());
-    
-
+    sessionStorage.setItem(
+      MONTHLY_DATA_TIMESTAMP_KEY + "_" + cacheKey,
+      Date.now().toString(),
+    );
   } catch (e) {
     // キャッシュ保存エラーは無視
   }
@@ -283,7 +291,7 @@ function saveMonthlyDataToCache(cacheKey: string, data: KintaiRecord[]): void {
 export function clearMonthlyDataCache(): void {
   try {
     sessionStorage.removeItem(MONTHLY_DATA_KEY);
-    
+
     // タイムスタンプキーもクリア
     const keys = [];
     for (let i = 0; i < sessionStorage.length; i++) {
@@ -292,10 +300,8 @@ export function clearMonthlyDataCache(): void {
         keys.push(key);
       }
     }
-    
-    keys.forEach(key => sessionStorage.removeItem(key));
-    
 
+    keys.forEach((key) => sessionStorage.removeItem(key));
   } catch (e) {
     // キャッシュクリアエラーは無視
   }
@@ -317,79 +323,75 @@ export function clearMonthlyDataCache(): void {
 // ISO日付文字列やDateオブジェクトから "HH:mm" 形式を抽出するヘルパー
 function extractHHMM(timeValue: string | Date | undefined): string {
   // 空文字や未定義の値は空文字を返す（00:00ではなく）
-  if (!timeValue || (typeof timeValue === 'string' && timeValue.trim() === '')) {
-    return '';
+  if (
+    !timeValue ||
+    (typeof timeValue === "string" && timeValue.trim() === "")
+  ) {
+    return "";
   }
-  
+
   try {
     const date = new Date(timeValue); // 文字列でもDateオブジェクトでも対応
-    const hours = date.getUTCHours().toString().padStart(2, '0'); // スプレッドシートの時刻はUTCとして解釈される場合がある
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    if (isNaN(parseInt(hours,10)) || isNaN(parseInt(minutes,10))) {
-        // もしパースに失敗したら、文字列からの直接抽出を試みる
-        if (typeof timeValue === 'string') {
-            const match = timeValue.match(/(\d{2}):(\d{2})/);
-            if (match && match.length > 2) return `${match[1]}:${match[2]}`;
-        }
-        return ''; // それでもダメなら空文字
+    const hours = date.getUTCHours().toString().padStart(2, "0"); // スプレッドシートの時刻はUTCとして解釈される場合がある
+    const minutes = date.getUTCMinutes().toString().padStart(2, "0");
+    if (isNaN(parseInt(hours, 10)) || isNaN(parseInt(minutes, 10))) {
+      // もしパースに失敗したら、文字列からの直接抽出を試みる
+      if (typeof timeValue === "string") {
+        const match = timeValue.match(/(\d{2}):(\d{2})/);
+        if (match && match.length > 2) return `${match[1]}:${match[2]}`;
+      }
+      return ""; // それでもダメなら空文字
     }
     return `${hours}:${minutes}`;
   } catch (e) {
     // 解析失敗時は空文字列を返す
-    return ''; // パース失敗時のフォールバック
+    return ""; // パース失敗時のフォールバック
   }
 }
 
-
-
-
 /* ========= getKintaiDataByDate ========= */
-export async function getKintaiDataByDate(dateString: string): Promise<KintaiData | null> {
+export async function getKintaiDataByDate(
+  dateString: string,
+): Promise<KintaiData | null> {
   try {
     // dateString (YYYY-MM-DD) から年と月を取得
     const dateObj = new Date(dateString);
     const year = dateObj.getFullYear();
     const month = dateObj.getMonth() + 1; // getMonthは0始まりなので+1
 
-
-    
     const monthlyRecords = await getMonthlyData(year, month);
-    const record = monthlyRecords.find(r => r.date === dateString);
+    const record = monthlyRecords.find((r) => r.date === dateString);
 
     if (record) {
-
-      
       const formattedStartTime = extractHHMM(record.startTime);
       const formattedEndTime = extractHHMM(record.endTime);
-      
+
       // breakTimeが文字列の場合は分数に変換してから再度文字列に変換
       let breakTime: string;
-      if (typeof record.breakTime === 'string') {
+      if (typeof record.breakTime === "string") {
         // 既にHH:mm形式の場合はそのまま使用
         breakTime = record.breakTime;
       } else {
         // 数値の場合は分数からHH:mm形式に変換
-        const breakTimeMinutes = record.breakTime !== undefined ? record.breakTime : 0;
+        const breakTimeMinutes =
+          record.breakTime !== undefined ? record.breakTime : 0;
         breakTime = formatBreakTimeFromMinutes(breakTimeMinutes);
       }
-
-
 
       return {
         date: record.date,
         startTime: formattedStartTime,
         breakTime: breakTime,
         endTime: formattedEndTime,
-        location: record.location || '',
-        workingTime: record.workingTime || '', // スプレッドシートのF列から取得
+        location: record.location || "",
+        workingTime: record.workingTime || "", // スプレッドシートのF列から取得
       };
     } else {
-
     }
     return null;
   } catch (error) {
     // データ取得エラーは無視
-    return null; 
+    return null;
   }
 }
 
@@ -399,15 +401,15 @@ export async function isEnteredDate(date: Date): Promise<boolean> {
   try {
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
-    
+
     // 日付文字列を取得（形式: YYYY-MM-DD）
     const dateStr = formatDateForComparison(date);
-    
+
     // 該当月のデータを取得
     const monthlyData = await getMonthlyData(year, month);
-    
+
     // データ内に該当日があるか確認
-    return monthlyData.some(record => record.date === dateStr);
+    return monthlyData.some((record) => record.date === dateStr);
   } catch (e) {
     return false;
   }
@@ -416,8 +418,8 @@ export async function isEnteredDate(date: Date): Promise<boolean> {
 // 比較用の日付フォーマット（YYYY-MM-DD）
 function formatDateForComparison(date: Date): string {
   const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -428,8 +430,7 @@ export const isAuthenticated = (): boolean =>
 export const getUserName = (): string | null =>
   localStorage.getItem(USER_NAME_KEY);
 
-export const getUserId = (): string | null =>
-  localStorage.getItem(USER_ID_KEY);
+export const getUserId = (): string | null => localStorage.getItem(USER_ID_KEY);
 
 export const getSpreadsheetId = (): string | null =>
   localStorage.getItem(SHEET_ID_KEY);
@@ -439,7 +440,7 @@ export const getSpreadsheetId = (): string | null =>
  * サーバーのバージョン情報を取得
  */
 export async function getVersionInfo(): Promise<VersionInfo> {
-  const response = await callGAS<VersionInfo>('getVersion');
+  const response = await callGAS<VersionInfo>("getVersion");
   return response.data as VersionInfo;
 }
 
@@ -447,7 +448,7 @@ export async function getVersionInfo(): Promise<VersionInfo> {
  * サーバーのバージョン履歴を取得
  */
 export async function getVersionHistory(): Promise<VersionHistoryItem[]> {
-  const response = await callGAS<VersionHistoryItem[]>('getVersionHistory');
+  const response = await callGAS<VersionHistoryItem[]>("getVersionHistory");
   return response.data as VersionHistoryItem[];
 }
 
@@ -455,7 +456,7 @@ export async function getVersionHistory(): Promise<VersionHistoryItem[]> {
  * ローカルストレージからサーバーバージョンを取得
  */
 export const getServerVersion = (): string | null =>
-  localStorage.getItem('kintai_server_version');
+  localStorage.getItem("kintai_server_version");
 
 /**
  * クライアントバージョンを取得（package.jsonから）
@@ -463,32 +464,35 @@ export const getServerVersion = (): string | null =>
 export const getClientVersion = (): string => {
   // 実際のプロジェクトではpackage.jsonから取得するが、
   // ここでは固定値を返す
-  return '0.1.0';
+  return "0.1.0";
 };
 
 /**
  * バージョン互換性チェック
  */
-export const checkVersionCompatibility = (): { compatible: boolean; message?: string } => {
+export const checkVersionCompatibility = (): {
+  compatible: boolean;
+  message?: string;
+} => {
   const serverVersion = getServerVersion();
   const clientVersion = getClientVersion();
-  
+
   if (!serverVersion) {
     return { compatible: true }; // サーバーバージョンが不明な場合は互換性ありとする
   }
-  
+
   // 簡単なバージョン互換性チェック
   // 実際のプロジェクトではより詳細なチェックを実装
-  const serverMajor = parseInt(serverVersion.split('-')[0].replace('v', ''));
-  const clientMajor = parseInt(clientVersion.split('.')[0]);
-  
+  const serverMajor = parseInt(serverVersion.split("-")[0].replace("v", ""));
+  const clientMajor = parseInt(clientVersion.split(".")[0]);
+
   if (Math.abs(serverMajor - clientMajor * 10) > 5) {
     return {
       compatible: false,
-      message: `バージョンの互換性に問題があります。サーバー: ${serverVersion}, クライアント: ${clientVersion}`
+      message: `バージョンの互換性に問題があります。サーバー: ${serverVersion}, クライアント: ${clientVersion}`,
     };
   }
-  
+
   return { compatible: true };
 };
 //   const year = date.getFullYear();

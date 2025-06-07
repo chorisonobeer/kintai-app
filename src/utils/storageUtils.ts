@@ -1,6 +1,6 @@
-import { KintaiData } from '../types';
+import { KintaiData } from "../types";
 
-const STORAGE_KEY_PREFIX = 'kintai_data_';
+const STORAGE_KEY_PREFIX = "kintai_data_";
 
 /**
  * 日付に基づいたストレージキーを生成

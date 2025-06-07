@@ -17,8 +17,8 @@ export const getCurrentDate = (): string => {
  */
 export const formatDate = (date: Date): string => {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
@@ -38,15 +38,15 @@ export const formatShortDate = (dateString: string): string => {
 export const isDateTooOld = (dateString: string): boolean => {
   const selectedDate = new Date(dateString);
   const today = new Date();
-  
+
   // 時間部分をリセットして日付だけを比較
   today.setHours(0, 0, 0, 0);
   selectedDate.setHours(0, 0, 0, 0);
-  
+
   // 日付の差を計算（ミリ秒→日）
   const timeDiff = today.getTime() - selectedDate.getTime();
   const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
-  
+
   return diffDays > 2;
 };
 
@@ -54,35 +54,38 @@ export const isDateTooOld = (dateString: string): boolean => {
  * HH:mm形式の文字列を分数に変換する
  */
 export const parseTimeStringToMinutes = (timeString: string): number => {
-  if (!timeString || timeString === '0:00') return 0;
-  
-  const parts = timeString.split(':');
+  if (!timeString || timeString === "0:00") return 0;
+
+  const parts = timeString.split(":");
   if (parts.length !== 2) return 0;
-  
+
   const hours = parseInt(parts[0], 10);
   const minutes = parseInt(parts[1], 10);
-  
+
   if (isNaN(hours) || isNaN(minutes)) return 0;
-  
+
   return hours * 60 + minutes;
 };
 
 /**
  * 分数をHH:mm形式の文字列に変換する
  */
-export const formatBreakTimeFromMinutes = (minutes: number | string | undefined | null): string => {
+export const formatBreakTimeFromMinutes = (
+  minutes: number | string | undefined | null,
+): string => {
   // undefinedやnullの場合は空文字を返す（データが無い状態）
-  if (minutes === undefined || minutes === null) return '';
-  
+  if (minutes === undefined || minutes === null) return "";
+
   // 0の場合は「0:00」を表示
-  if (minutes === 0) return '0:00';
-  
-  const totalMinutes = typeof minutes === 'string' ? parseInt(minutes, 10) : minutes;
-  if (isNaN(totalMinutes) || totalMinutes < 0) return '';
-  
+  if (minutes === 0) return "0:00";
+
+  const totalMinutes =
+    typeof minutes === "string" ? parseInt(minutes, 10) : minutes;
+  if (isNaN(totalMinutes) || totalMinutes < 0) return "";
+
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
-  return `${hours}:${mins.toString().padStart(2, '0')}`;
+  return `${hours}:${mins.toString().padStart(2, "0")}`;
 };
 
 /**
@@ -92,15 +95,15 @@ export const formatBreakTimeFromMinutes = (minutes: number | string | undefined 
 export const isDateInValidRange = (dateString: string): boolean => {
   const selectedDate = new Date(dateString);
   const today = new Date();
-  
+
   // 時間部分をリセットして日付だけを比較
   today.setHours(0, 0, 0, 0);
   selectedDate.setHours(0, 0, 0, 0);
-  
+
   // 日付の差を計算（ミリ秒→日）
   const timeDiff = today.getTime() - selectedDate.getTime();
   const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
-  
+
   // 2日前から当日（0以上2以下）
   return diffDays >= 0 && diffDays <= 2;
 };
@@ -111,13 +114,13 @@ export const isDateInValidRange = (dateString: string): boolean => {
 export const formatDateWithWeekday = (dateString: string): string => {
   const date = new Date(dateString);
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
   // 曜日の配列（日本語）
-  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const weekday = weekdays[date.getDay()];
-  
+
   return `${year}/${month}/${day}（${weekday}）`;
 };
 
@@ -126,7 +129,7 @@ export const formatDateWithWeekday = (dateString: string): string => {
  */
 export const getWeekdayName = (dateString: string): string => {
   const date = new Date(dateString);
-  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   return weekdays[date.getDay()];
 };
 
@@ -134,22 +137,22 @@ export const getWeekdayName = (dateString: string): string => {
  * 選択可能な日付の配列を取得する（今日から2日前まで）
  * 日付選択コンポーネント用のラベル付きオブジェクトを返す
  */
-export const getSelectableDates = (): {value: string, label: string}[] => {
+export const getSelectableDates = (): { value: string; label: string }[] => {
   const today = new Date();
   const dates = [];
-  
+
   for (let i = 0; i <= 2; i++) {
     const date = new Date();
     date.setDate(today.getDate() - i);
     const dateString = formatDate(date);
     const formattedDate = formatDateWithWeekday(dateString);
-    
+
     dates.push({
       value: dateString,
-      label: formattedDate
+      label: formattedDate,
     });
   }
-  
+
   // 日付を昇順（過去から現在へ）にソートして返す
   return dates.reverse();
 };
@@ -168,15 +171,15 @@ export const isTimeBeforeOrEqual = (time1: string, time2: string): boolean => {
   if (!isValidTimeFormat(time1) || !isValidTimeFormat(time2)) {
     return false;
   }
-  
-  const [hours1, minutes1] = time1.split(':').map(Number);
-  const [hours2, minutes2] = time2.split(':').map(Number);
-  
+
+  const [hours1, minutes1] = time1.split(":").map(Number);
+  const [hours2, minutes2] = time2.split(":").map(Number);
+
   if (hours1 < hours2) {
     return true;
   } else if (hours1 === hours2) {
     return minutes1 <= minutes2;
   }
-  
+
   return false;
 };
