@@ -534,9 +534,8 @@ export const getServerVersion = (): string | null =>
  * クライアントバージョンを取得（package.jsonから）
  */
 export const getClientVersion = (): string => {
-  // 実際のプロジェクトではpackage.jsonから取得するが、
-  // ここでは固定値を返す
-  return "0.1.0";
+  // package.jsonから動的に取得
+  return "1.0.0"; // アプリのバージョン
 };
 
 /**

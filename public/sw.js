@@ -24,6 +24,11 @@ self.addEventListener('install', (event) => {
 
 // フェッチ時のキャッシュ戦略
 self.addEventListener('fetch', (event) => {
+  // chrome-extension や unsupported スキームをスキップ
+  if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
@@ -32,8 +37,9 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
 
-        // ネットワークからフェッチ
-        return fetch(event.request).then(
+        // キャッシュになければネットワークから取得
+        return fetch(event.request)
+        .then(
           (response) => {
             // レスポンスが無効な場合はそのまま返す
             if (!response || response.status !== 200 || response.type !== 'basic') {
@@ -46,6 +52,9 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME)
               .then((cache) => {
                 cache.put(event.request, responseToCache);
+              })
+              .catch((error) => {
+                console.warn('キャッシュ保存に失敗:', error);
               });
 
             return response;

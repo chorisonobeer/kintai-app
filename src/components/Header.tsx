@@ -129,11 +129,11 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
             <div className="modal-body">
               <div className="version-info">
                 <div className="version-item">
-                  <strong>サーバーバージョン:</strong>{" "}
-                  {versionInfo?.version || "N/A"}
+                  <strong>アプリバージョン:</strong> {getClientVersion()}
                 </div>
                 <div className="version-item">
-                  <strong>クライアントバージョン:</strong> {getClientVersion()}
+                  <strong>サーバーバージョン:</strong>{" "}
+                  {versionInfo?.version || "N/A"}
                 </div>
                 <div className="version-item">
                   <strong>最終更新:</strong>{" "}
@@ -145,17 +145,17 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
                   <strong>説明:</strong> {versionInfo?.description || "N/A"}
                 </div>
                 <div className="version-item">
-                  <strong>互換性:</strong>
+                  <strong>互換性:</strong>{" "}
                   <span
-                    className={
-                      versionCompatibility.compatible
-                        ? "compatible"
-                        : "incompatible"
-                    }
+                    style={{
+                      color: versionCompatibility.compatible
+                        ? "green"
+                        : "red",
+                    }}
                   >
                     {versionCompatibility.compatible
-                      ? "✅ 互換性あり"
-                      : "❌ 互換性なし"}
+                      ? "✓ 互換性あり"
+                      : "✗ 互換性なし"}
                   </span>
                 </div>
               </div>
