@@ -278,92 +278,39 @@ const KintaiForm: React.FC = () => {
         setIsDataLoading(true);
         setErrors({}); // 日付変更時にエラーをリセット
 
-        // 先に未入力状態にリセットして「ゆらぎ」を防ぐ
-        setStartTime(initialState.startTime);
-        setBreakTime(initialState.breakTime);
-        setEndTime(initialState.endTime);
-        setLocation(initialState.location);
-        setWorkingTime("");
-        dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
+        // 編集中でない場合のみ状態をリセット（入力データ消失を防ぐ）
+        if (!formState.isEditing) {
+          setStartTime(initialState.startTime);
+          setBreakTime(initialState.breakTime);
+          setEndTime(initialState.endTime);
+          setLocation(initialState.location);
+          setWorkingTime("");
+          dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
+        }
       });
 
       try {
         // 瞬時判定: 既存のmonthlyDataから直接判定を実行
-        console.log("⚡ 瞬時入力判定を実行中...");
         const comparison = compareLogics(new Date(deferredDate));
         const entered = comparison.legacy; // 現在は既存ロジックを使用
-        console.log("✅ 瞬時判定完了:", { entered, date: deferredDate });
 
         // 判定テーブル更新は非同期でバックグラウンド実行（UIをブロックしない）
         setTimeout(async () => {
           try {
-            console.log("🔄 バックグラウンドで判定テーブルを更新中...");
             await refreshData();
-            console.log("✅ バックグラウンド更新完了");
-
-            // 更新後のエビデンスを表示
-            console.log("📊 更新後の判定テーブル状況:");
-            console.log(`対象年月: ${currentYear}年${currentMonth}月`);
-            console.log(`総データ件数: ${monthlyData.length}件`);
           } catch (bgError) {
-            console.warn("バックグラウンド更新エラー:", bgError);
+            // バックグラウンド更新エラー
           }
         }, 0);
 
         // 開発環境でのみ比較結果をログ出力
         if (process.env.NODE_ENV === "development" && !comparison.match) {
-          console.log("入力判定ロジック比較結果:", {
-            date: formState.date,
-            legacy: comparison.legacy,
-            new: comparison.new,
-            match: comparison.match,
-          });
+          // 入力判定ロジック比較結果
         }
 
-        // デバッグログ: 今月の勤怠データを出力
-        console.log("=== 今月の勤怠データ ===");
-        console.log(`対象年月: ${currentYear}年${currentMonth}月`);
-        console.table(
-          monthlyData.map((record) => ({
-            日付: record.date,
-            出勤時間: record.startTime || "未入力",
-            休憩時間: record.breakTime || "未入力",
-            退勤時間: record.endTime || "未入力",
-            勤務時間: record.workingTime || "未計算",
-            勤務場所: record.location || "未選択",
-          })),
-        );
+        // 今月の勤怠データを確認
 
-        // デバッグログ: データ入力判定テーブルを出力
-        console.log("=== データ入力判定テーブル ===");
-        const entryStatusTable = monthlyData.map((record) => {
-          const recordDate = new Date(record.date);
-          const legacyStatus = isDateEntered(recordDate);
-          const newStatus = isDateEnteredNew(recordDate);
-          return {
-            日付: record.date,
-            既存ロジック: legacyStatus ? "入力済み" : "未入力",
-            新ロジック: newStatus ? "入力済み" : "未入力",
-            判定一致: legacyStatus === newStatus ? "一致" : "不一致",
-            出勤時間有無: record.startTime ? "有" : "無",
-            退勤時間有無: record.endTime ? "有" : "無",
-            休憩時間有無: record.breakTime ? "有" : "無",
-          };
-        });
-        console.table(entryStatusTable);
-
-        // 不一致がある場合は警告を出力
-        const mismatches = entryStatusTable.filter(
-          (item) => item.判定一致 === "不一致",
-        );
-        if (mismatches.length > 0) {
-          console.warn(
-            `⚠️ 入力判定ロジックに不一致が${mismatches.length}件あります:`,
-          );
-          console.table(mismatches);
-        } else {
-          console.log("✅ 全ての日付で入力判定ロジックが一致しています");
-        }
+        // データ入力判定テーブルを確認
 
         if (entered) {
           const data = getKintaiDataByDate(deferredDate);

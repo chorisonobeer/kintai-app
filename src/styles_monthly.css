@@ -155,7 +155,7 @@
   background: none;
   border: none;
   border-radius: 10%;
-  width: var(--button-min-width)+40px;
+  width: var(--button-min-width) + 40px;
   height: var(--button-min-height);
   display: flex;
   align-items: center;

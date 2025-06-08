@@ -43,7 +43,7 @@ export class EntryStatusManager {
     monthlyData: KintaiData[],
   ): Promise<void> {
     try {
-      this.debugLog(`Initializing month: ${yearMonth}`);
+      // EntryStatusManager: 初期化開始
 
       // 既存キャッシュのクリーンアップ
       if (this.options.autoCleanup) {
@@ -74,7 +74,7 @@ export class EntryStatusManager {
       // ローカルストレージに保存
       await this.saveToStorage();
 
-      this.debugLog(`Month initialized with ${entries.size} entries`);
+      // EntryStatusManager: 初期化完了
     } catch (error) {
       console.error("Failed to initialize month:", error);
       throw error;
@@ -116,7 +116,7 @@ export class EntryStatusManager {
       // ローカルストレージに保存
       await this.saveToStorage();
 
-      this.debugLog(`Updated entry status for ${date}: ${hasEntry}`);
+      // EntryStatusManager: 判定結果
     } catch (error) {
       console.error("Failed to update entry status:", error);
       throw error;

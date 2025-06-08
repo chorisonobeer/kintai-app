@@ -16,19 +16,11 @@ const isDevelopment = import.meta.env.DEV;
 
 /* ========= 定数 ========= */
 // 開発環境ではプロキシ経由でGAS APIを呼び出し、本番環境ではNetlify Functionsを使用
-const GAS_API_URL =
-  import.meta.env.VITE_GAS_API_URL ||
-  "https://script.google.com/macros/s/AKfycbzW33cRCB_rYdRx-bNQhj-2pghluHl09_iu26As9Xm7f7PIEoRk2B_42ubLYO6kKpid4w/exec";
 const FUNC_URL = "/.netlify/functions/kintai-api"; // 本番環境でNetlify Functionsを経由する
 const DEV_PROXY_URL = "/api/gas"; // 開発環境でプロキシ経由でGASを呼び出す
 
 // デバッグ用ログ
-console.log("=== API Service 初期化 ===");
-console.log("isDevelopment:", isDevelopment);
-console.log("VITE_GAS_API_URL:", import.meta.env.VITE_GAS_API_URL);
-console.log("GAS_API_URL:", GAS_API_URL);
-console.log("FUNC_URL:", FUNC_URL);
-console.log("=========================");
+// API Service 初期化
 
 const TOKEN_KEY = "kintai_token";
 const USER_ID_KEY = "kintai_user_id";
@@ -114,17 +106,17 @@ async function fetchWithRetry(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`API呼び出し試行 ${attempt + 1}/${maxRetries + 1}`);
+      // API呼び出し試行
       const response = await fetchWithTimeout(url, options, timeout);
       return response;
     } catch (error) {
       lastError = error as Error;
-      console.warn(`試行 ${attempt + 1} 失敗:`, error);
+      // 試行失敗
 
       // 最後の試行でない場合は少し待機
       if (attempt < maxRetries) {
         const delay = Math.min(1000 * 2 ** attempt, 5000); // 指数バックオフ（最大5秒）
-        console.log(`${delay}ms後にリトライします...`);
+        // リトライ待機
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -138,12 +130,7 @@ async function callGAS<T = unknown>(
   payload: object = {},
   withToken = false,
 ): Promise<ApiOk<T>> {
-  console.log("=== callGAS 実行 ===");
-  console.log("action:", action);
-  console.log("isDevelopment:", isDevelopment);
-  console.log("使用するURL:", isDevelopment ? GAS_API_URL : FUNC_URL);
-  console.log("payload:", payload);
-  console.log("withToken:", withToken);
+  // callGAS 実行
 
   const body: Record<string, unknown> = { action, payload };
   if (withToken) body.token = localStorage.getItem(TOKEN_KEY);
@@ -154,7 +141,7 @@ async function callGAS<T = unknown>(
 
   // 同じリクエストが進行中の場合は待機
   if (pendingRequests.has(requestKey)) {
-    console.log(`重複リクエスト検出: ${action} - 既存のリクエストを待機中...`);
+    // 重複リクエスト検出
     return pendingRequests.get(requestKey)!;
   }
 
@@ -169,9 +156,7 @@ async function callGAS<T = unknown>(
     try {
       // 開発環境ではプロキシ経由、本番環境ではNetlify Functionsを使用
       const apiUrl = isDevelopment ? DEV_PROXY_URL : FUNC_URL;
-      console.log(`API URL: ${apiUrl} (開発環境: ${isDevelopment})`);
-
-      console.log("API呼び出し中...");
+      // API呼び出し中
       const res = await fetchWithRetry(apiUrl, fetchOptions, 2, 8000);
 
       if (!res.ok) {
@@ -179,7 +164,7 @@ async function callGAS<T = unknown>(
       }
 
       const json = (await res.json()) as ApiResp<T>;
-      console.log("API レスポンス:", json);
+      // API レスポンス受信
 
       // バージョン情報をローカルストレージに保存
       if (json.version) {
@@ -201,7 +186,7 @@ async function callGAS<T = unknown>(
 
       return json as ApiOk<T>;
     } catch (error) {
-      console.error("API呼び出しエラー:", error);
+      // API呼び出しエラー
       throw error;
     } finally {
       // リクエストキャッシュから削除
@@ -222,12 +207,7 @@ export async function login(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // ログイン前に既存のlocalStorageを完全にクリア
-    console.log("=== LOGIN DEBUG ===");
-    console.log("ログイン前のlocalStorage状態:");
-    console.log("既存TOKEN_KEY:", localStorage.getItem(TOKEN_KEY));
-    console.log("既存USER_ID_KEY:", localStorage.getItem(USER_ID_KEY));
-    console.log("既存USER_NAME_KEY:", localStorage.getItem(USER_NAME_KEY));
-    console.log("既存SHEET_ID_KEY:", localStorage.getItem(SHEET_ID_KEY));
+    // ログイン処理開始
 
     // 既存の認証情報を完全にクリア
     localStorage.removeItem(TOKEN_KEY);
@@ -240,15 +220,11 @@ export async function login(
     sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
     clearMonthlyDataCache();
 
-    console.log("既存データクリア完了");
+    // 既存データクリア完了
 
     const r = await callGAS<never>("login", { name, password });
 
-    console.log("入力された名前:", name);
-    console.log("GASからのレスポンス:", r);
-    console.log("保存されるuserName:", r.userName);
-    console.log("保存されるuserId:", r.userId);
-    console.log("保存されるspreadsheetId:", r.spreadsheetId);
+    // ログイン成功
 
     // 新しい認証情報を保存
     localStorage.setItem(TOKEN_KEY, r.token as string);
@@ -257,12 +233,7 @@ export async function login(
     localStorage.setItem(SHEET_ID_KEY, r.spreadsheetId as string);
 
     // デバッグ: 保存後の値を確認
-    console.log("localStorage保存後の確認:");
-    console.log("TOKEN_KEY:", localStorage.getItem(TOKEN_KEY));
-    console.log("USER_ID_KEY:", localStorage.getItem(USER_ID_KEY));
-    console.log("USER_NAME_KEY:", localStorage.getItem(USER_NAME_KEY));
-    console.log("SHEET_ID_KEY:", localStorage.getItem(SHEET_ID_KEY));
-    console.log("===================");
+    // localStorage保存完了
 
     return { success: true };
   } catch (e) {
@@ -355,18 +326,10 @@ export async function getMonthlyData(
   const userId = localStorage.getItem(USER_ID_KEY);
 
   // デバッグ: データ取得時の認証情報を確認
-  console.log("=== GET MONTHLY DATA DEBUG ===");
-  console.log("取得対象:", year, "年", month, "月");
-  console.log("使用するuserId:", userId);
-  console.log("使用するspreadsheetId:", spreadsheetId);
-  console.log("現在のユーザー名:", localStorage.getItem(USER_NAME_KEY));
+  // 月次データ取得開始
 
   if (!token || !spreadsheetId || !userId) {
-    console.log("認証情報不足エラー:", {
-      token: !!token,
-      spreadsheetId: !!spreadsheetId,
-      userId: !!userId,
-    });
+    // 認証情報不足エラー
     throw new Error("認証情報が不足しています");
   }
 
@@ -377,13 +340,13 @@ export async function getMonthlyData(
   if (!forceRefresh) {
     const cachedData = getMonthlyDataFromCache(cacheKey);
     if (cachedData) {
-      console.log("キャッシュからデータを取得:", cachedData.length, "件");
+      // キャッシュからデータを取得
       return cachedData;
     }
   }
 
   // キャッシュになければサーバーから取得
-  console.log("GASにリクエスト送信:", { spreadsheetId, userId, year, month });
+  // GASにリクエスト送信
 
   const r = await callGAS<KintaiRecord[]>(
     "getMonthlyData",
@@ -392,12 +355,7 @@ export async function getMonthlyData(
   );
 
   // デバッグ: GASからのレスポンスを確認
-  console.log("GASからのレスポンス:", r);
-  console.log("取得したデータ件数:", (r.data as KintaiRecord[])?.length || 0);
-  if ((r.data as KintaiRecord[])?.length > 0) {
-    console.log("最初のレコード:", (r.data as KintaiRecord[])[0]);
-  }
-  console.log("==============================");
+  // GASからのレスポンス受信
 
   // キャッシュに保存
   saveMonthlyDataToCache(cacheKey, r.data as KintaiRecord[]);
@@ -637,13 +595,7 @@ export const isAuthenticated = (): boolean => {
     spreadsheetId !== null;
 
   // デバッグ: 認証状態を詳細ログ出力
-  console.log("=== 認証状態チェック ===");
-  console.log("TOKEN_KEY存在:", token !== null);
-  console.log("USER_ID_KEY存在:", userId !== null);
-  console.log("USER_NAME_KEY存在:", userName !== null);
-  console.log("SHEET_ID_KEY存在:", spreadsheetId !== null);
-  console.log("認証状態:", isValid ? "有効" : "無効");
-  console.log("=====================");
+  // 認証状態チェック
 
   return isValid;
 };

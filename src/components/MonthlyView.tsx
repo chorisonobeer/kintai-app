@@ -133,7 +133,6 @@ const MonthlyView: React.FC = () => {
     }
 
     // 変換に失敗した場合は元の文字列を返すか、エラーを示す値を返す
-    console.warn("未対応の日付形式:", dateStr);
     return dateStr; // または適切なエラー表示
   };
 
@@ -213,7 +212,6 @@ const MonthlyView: React.FC = () => {
       }
 
       // その他の形式の場合は変換できないので元の値を返すか、エラー表示
-      console.warn("未対応の勤務時間形式:", workTimeStr);
       return workTimeStr; // または '-' など
     } catch (e) {
       return "-";

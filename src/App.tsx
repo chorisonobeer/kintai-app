@@ -20,17 +20,12 @@ const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) =>
 const App: React.FC = () => {
   // アプリ起動時にlocalStorageの整合性をチェック
   useEffect(() => {
-    console.log("=== アプリ起動時チェック ===");
-    console.log("現在のURL:", window.location.href);
-    console.log("認証状態:", isAuthenticated());
-
+    // アプリ起動時チェック
     // 認証が必要なページで認証情報が不完全な場合は強制ログアウト
     if (window.location.pathname !== "/login" && !isAuthenticated()) {
-      console.log("認証情報が不完全です。ログアウト処理を実行します。");
       logout();
       window.location.href = "/login";
     }
-    console.log("=============================");
 
     // Service Workerの登録とバックグラウンド同期の初期化
     initializeServiceWorker();
@@ -40,9 +35,7 @@ const App: React.FC = () => {
   const initializeServiceWorker = async () => {
     if ("serviceWorker" in navigator) {
       try {
-        console.log("Service Worker登録開始...");
         const registration = await navigator.serviceWorker.register("/sw.js");
-        console.log("Service Worker登録成功:", registration);
 
         // Service Workerからのメッセージを受信
         navigator.serviceWorker.addEventListener(
@@ -55,10 +48,10 @@ const App: React.FC = () => {
           await initializeBackgroundSync(registration);
         }
       } catch (error) {
-        console.error("Service Worker登録失敗:", error);
+        // Service Worker登録失敗
       }
     } else {
-      console.warn("Service Workerがサポートされていません");
+      // Service Workerがサポートされていません
     }
   };
 
@@ -67,8 +60,6 @@ const App: React.FC = () => {
     registration: ServiceWorkerRegistration,
   ) => {
     try {
-      console.log("バックグラウンド同期初期化開始...");
-
       // BackgroundSyncManagerを開始
       await backgroundSyncManager.start();
 
@@ -76,21 +67,19 @@ const App: React.FC = () => {
       if (registration.active) {
         registration.active.postMessage({ type: "REGISTER_SYNC" });
       }
-
-      console.log("バックグラウンド同期初期化完了");
     } catch (error) {
-      console.error("バックグラウンド同期初期化失敗:", error);
+      // バックグラウンド同期初期化失敗
     }
   };
 
   // Service Workerからのメッセージ処理
   const handleServiceWorkerMessage = async (event: MessageEvent) => {
-    const { type, timestamp } = event.data;
+    const { type } = event.data;
 
     switch (type) {
       case "BACKGROUND_SYNC_REQUEST":
       case "PERFORM_SYNC":
-        console.log("Service Workerから同期要求受信:", type, timestamp);
+        // Service Workerから同期要求受信
 
         // 認証済みの場合のみ同期実行
         if (isAuthenticated()) {
@@ -98,15 +87,15 @@ const App: React.FC = () => {
             // 現在の年月と空のデータ配列で同期を実行（実際のデータは内部で取得）
             const currentYearMonth = new Date().toISOString().substring(0, 7);
             await backgroundSyncManager.manualSync(currentYearMonth, []);
-            console.log("バックグラウンド同期完了");
+            // バックグラウンド同期完了
           } catch (error) {
-            console.error("バックグラウンド同期エラー:", error);
+            // バックグラウンド同期エラー
           }
         }
         break;
 
       default:
-        console.log("未知のService Workerメッセージ:", type);
+        // 未知のService Workerメッセージ
     }
   };
 

@@ -66,25 +66,23 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
 
     // 同じリクエストが進行中の場合はスキップ
     if (isDataLoading && lastFetchKey === fetchKey && !forceRefresh) {
-      console.log(`重複データ取得をスキップ: ${year}年${month}月`);
+      // 重複データ取得をスキップ
       return;
     }
 
     try {
       setIsDataLoading(true);
       setLastFetchKey(fetchKey);
-      console.log(
-        `データ取得開始: ${year}年${month}月 (forceRefresh: ${forceRefresh})`,
-      );
+      // データ取得開始
 
       const data = await getMonthlyData(year, month, forceRefresh);
       setMonthlyData(data);
-      console.log(`データ取得完了: ${data.length}件`);
+      // データ取得完了
 
       // 新しい入力判定ロジック用のキャッシュを初期化
       await initializeEntryStatusCache();
     } catch (error) {
-      console.error(`データ取得エラー: ${year}年${month}月`, error);
+      // データ取得エラー
       setMonthlyData([]);
     } finally {
       setIsDataLoading(false);
@@ -107,9 +105,9 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
       }));
 
       await entryStatusManager.initializeMonth(yearMonth, convertedData);
-      console.log(`EntryStatusManager初期化完了: ${yearMonth}`);
+      // EntryStatusManager初期化完了
     } catch (error) {
-      console.error("EntryStatusManager初期化エラー:", error);
+      // EntryStatusManager初期化エラー
     }
   };
 
@@ -119,7 +117,7 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
 
     // 既に同じデータを取得済みの場合はスキップ
     if (lastFetchKey === fetchKey && monthlyData.length > 0) {
-      console.log(`既存データを使用: ${currentYear}年${currentMonth}月`);
+      // 既存データを使用
       return;
     }
 
@@ -166,12 +164,7 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
 
     // 不整合がある場合はログ出力
     if (!match) {
-      const dateStr = formatDateForComparison(date);
-      console.warn(`入力判定ロジック不整合検出: ${dateStr}`, {
-        legacy: legacyResult,
-        new: newResult,
-        date: dateStr,
-      });
+      // 入力判定ロジック不整合検出（デバッグ用）
     }
 
     return { legacy: legacyResult, new: newResult, match };

@@ -77,11 +77,11 @@ export class BackgroundSyncManager {
    */
   start(): void {
     if (this.syncTimer) {
-      this.debugLog("Background sync already running");
+      // Background sync already running
       return;
     }
 
-    this.debugLog("Starting background sync");
+    // Starting background sync
     this.scheduleNextSync();
   }
 
@@ -92,7 +92,7 @@ export class BackgroundSyncManager {
     if (this.syncTimer) {
       clearTimeout(this.syncTimer);
       this.syncTimer = null;
-      this.debugLog("Background sync stopped");
+      // Background sync stopped
     }
     this.setSyncState("idle");
   }
@@ -103,7 +103,7 @@ export class BackgroundSyncManager {
    * @param data 勤怠データ
    */
   async manualSync(yearMonth: string, data: KintaiData[]): Promise<SyncResult> {
-    this.debugLog(`Manual sync requested for ${yearMonth}`);
+    // Manual sync requested
     return this.performSync(yearMonth, data);
   }
 
@@ -112,7 +112,7 @@ export class BackgroundSyncManager {
    */
   private scheduleNextSync(): void {
     if (this.syncState === "offline" && !this.options.offlineMode) {
-      this.debugLog("Skipping sync schedule - offline mode");
+      // Skipping sync schedule - offline mode
       return;
     }
 
@@ -124,7 +124,7 @@ export class BackgroundSyncManager {
       this.scheduleNextSync();
     }, delay);
 
-    this.debugLog(`Next sync scheduled in ${delay}ms`);
+    // Next sync scheduled
   }
 
   /**
@@ -136,7 +136,7 @@ export class BackgroundSyncManager {
       const syncStatus = entryStatusManager.getSyncStatus();
 
       if (!syncStatus.isInitialized) {
-        this.debugLog("Entry status manager not initialized, skipping sync");
+        // Entry status manager not initialized, skipping sync
         return;
       }
 
@@ -144,7 +144,7 @@ export class BackgroundSyncManager {
       // 今回は簡易実装として、既存のデータを使用
       const { yearMonth } = syncStatus;
       if (!yearMonth) {
-        this.debugLog("No year-month available, skipping sync");
+        // No year-month available, skipping sync
         return;
       }
 
@@ -152,9 +152,9 @@ export class BackgroundSyncManager {
       // const data = await apiService.getMonthlyData(yearMonth);
       // await this.performSync(yearMonth, data);
 
-      this.debugLog("Periodic sync completed (placeholder)");
+      // Periodic sync completed (placeholder)
     } catch (error) {
-      this.debugLog(`Periodic sync failed: ${error}`);
+      // Periodic sync failed
     }
   }
 

@@ -52,7 +52,7 @@ export function normalizeTimeString(timeStr: string): TimeString {
   const minutes = parseInt(parts[1], 10);
 
   // 数値として有効でない場合は00:00を返す
-  if (isNaN(hours) || isNaN(minutes)) {
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
     return "00:00";
   }
 
@@ -314,7 +314,14 @@ export function formatTimeForDisplay(
   // 12時間形式への変換（必要に応じて実装）
   const [hours, minutes] = timeStr.split(":").map((num) => parseInt(num, 10));
   const period = hours >= 12 ? "PM" : "AM";
-  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  let displayHours;
+  if (hours === 0) {
+    displayHours = 12;
+  } else if (hours > 12) {
+    displayHours = hours - 12;
+  } else {
+    displayHours = hours;
+  }
 
   return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
 }

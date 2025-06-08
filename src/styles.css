@@ -27,7 +27,8 @@
 }
 
 /* すべてのinputとselectのデフォルトスタイルを無効化 */
-input, select {
+input,
+select {
   outline: none !important;
   border: none !important;
   box-shadow: none !important;
@@ -40,9 +41,12 @@ input, select {
   /* フォーカス時のデフォルトスタイルを完全に無効化 */
 }
 
-input:focus, select:focus,
-input:active, select:active,
-input:hover, select:hover {
+input:focus,
+select:focus,
+input:active,
+select:active,
+input:hover,
+select:hover {
   outline: none !important;
   border: none !important;
   box-shadow: none !important;
@@ -475,7 +479,7 @@ body {
 
 /* フォームグループの余白縮小 */
 .form-group {
-  margin-bottom: 1.0vh;
+  margin-bottom: 1vh;
   position: relative;
   overflow: visible;
   background-color: transparent;
@@ -500,7 +504,7 @@ body {
 .time-picker-group,
 .break-picker-group {
   display: block;
-  margin-bottom: 8px!important;
+  margin-bottom: 8px !important;
 }
 
 .time-picker-group label,
@@ -676,7 +680,7 @@ body {
 /* 入力可能な状態を示すスタイル */
 .time-input-enabled {
   border: 2px solid transparent !important;
-  background-color:rgb(255, 255, 255) !important;
+  background-color: rgb(255, 255, 255) !important;
   /* プルダウンリストのレスポンシブ対応 */
   max-height: 150px;
   overflow-y: auto;
