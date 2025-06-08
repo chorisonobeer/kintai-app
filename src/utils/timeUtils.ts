@@ -4,7 +4,7 @@
  * 変更概要: 新規追加 - 統一時間データ処理ユーティリティ
  */
 
-import { TimeString, BreakTime } from '../types/unified';
+import { TimeString, BreakTime } from "../types/unified";
 
 // ————————————————————————————————
 // 時間形式の統一処理
@@ -31,21 +31,21 @@ export function isValidTimeFormat(timeStr: string): boolean {
  * @returns 正規化された時間文字列（例: "09:30", "09:05"）
  */
 export function normalizeTimeString(timeStr: string): TimeString {
-  if (!timeStr || timeStr.trim() === '') {
-    return '00:00';
+  if (!timeStr || timeStr.trim() === "") {
+    return "00:00";
   }
 
   const trimmed = timeStr.trim();
-  
+
   // 既に正しい形式の場合はそのまま返す
   if (isValidTimeFormat(trimmed)) {
     return trimmed;
   }
 
   // コロンで分割して時間と分を取得
-  const parts = trimmed.split(':');
+  const parts = trimmed.split(":");
   if (parts.length !== 2) {
-    return '00:00';
+    return "00:00";
   }
 
   const hours = parseInt(parts[0], 10);
@@ -53,16 +53,16 @@ export function normalizeTimeString(timeStr: string): TimeString {
 
   // 数値として有効でない場合は00:00を返す
   if (isNaN(hours) || isNaN(minutes)) {
-    return '00:00';
+    return "00:00";
   }
 
   // 範囲チェック
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-    return '00:00';
+    return "00:00";
   }
 
   // HH:mm形式にフォーマット
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
 /**
@@ -72,13 +72,13 @@ export function normalizeTimeString(timeStr: string): TimeString {
  */
 export function minutesToTimeString(minutes: number): TimeString {
   if (minutes < 0) {
-    return '00:00';
+    return "00:00";
   }
 
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
 
-  return `${hours.toString().padStart(2, '0')}:${remainingMinutes.toString().padStart(2, '0')}`;
+  return `${hours.toString().padStart(2, "0")}:${remainingMinutes.toString().padStart(2, "0")}`;
 }
 
 /**
@@ -91,7 +91,7 @@ export function timeStringToMinutes(timeStr: TimeString): number {
     return 0;
   }
 
-  const [hours, minutes] = timeStr.split(':').map(num => parseInt(num, 10));
+  const [hours, minutes] = timeStr.split(":").map((num) => parseInt(num, 10));
   return hours * 60 + minutes;
 }
 
@@ -113,7 +113,7 @@ export function normalizeBreakTime(breakTime: BreakTime): {
   // null/undefinedの場合
   if (breakTime === null || breakTime === undefined) {
     return {
-      timeString: '00:00',
+      timeString: "00:00",
       minutes: 0,
       isValid: false,
       isEmpty: true,
@@ -121,7 +121,7 @@ export function normalizeBreakTime(breakTime: BreakTime): {
   }
 
   // 数値の場合（分単位）
-  if (typeof breakTime === 'number') {
+  if (typeof breakTime === "number") {
     const minutes = Math.max(0, Math.floor(breakTime));
     return {
       timeString: minutesToTimeString(minutes),
@@ -132,13 +132,13 @@ export function normalizeBreakTime(breakTime: BreakTime): {
   }
 
   // 文字列の場合
-  if (typeof breakTime === 'string') {
+  if (typeof breakTime === "string") {
     const trimmed = breakTime.trim();
-    
+
     // 空文字列の場合
-    if (trimmed === '') {
+    if (trimmed === "") {
       return {
-        timeString: '00:00',
+        timeString: "00:00",
         minutes: 0,
         isValid: false,
         isEmpty: true,
@@ -148,7 +148,7 @@ export function normalizeBreakTime(breakTime: BreakTime): {
     // 正規化を試行
     const normalized = normalizeTimeString(trimmed);
     const minutes = timeStringToMinutes(normalized);
-    
+
     return {
       timeString: normalized,
       minutes,
@@ -159,7 +159,7 @@ export function normalizeBreakTime(breakTime: BreakTime): {
 
   // その他の型の場合
   return {
-    timeString: '00:00',
+    timeString: "00:00",
     minutes: 0,
     isValid: false,
     isEmpty: true,
@@ -186,7 +186,10 @@ export function isValidBreakTimeInput(breakTime: BreakTime): boolean {
  * @param endTime 終了時間（HH:mm形式）
  * @returns 時間差（分単位）、無効な場合は0
  */
-export function calculateTimeDifference(startTime: TimeString, endTime: TimeString): number {
+export function calculateTimeDifference(
+  startTime: TimeString,
+  endTime: TimeString,
+): number {
   if (!isValidTimeFormat(startTime) || !isValidTimeFormat(endTime)) {
     return 0;
   }
@@ -196,7 +199,7 @@ export function calculateTimeDifference(startTime: TimeString, endTime: TimeStri
 
   // 日をまたぐ場合を考慮
   if (endMinutes < startMinutes) {
-    return (24 * 60) - startMinutes + endMinutes;
+    return 24 * 60 - startMinutes + endMinutes;
   }
 
   return endMinutes - startMinutes;
@@ -212,17 +215,17 @@ export function calculateTimeDifference(startTime: TimeString, endTime: TimeStri
 export function calculateWorkingTime(
   startTime: TimeString,
   endTime: TimeString,
-  breakTime: BreakTime
+  breakTime: BreakTime,
 ): TimeString {
   // 総勤務時間を計算
   const totalMinutes = calculateTimeDifference(startTime, endTime);
-  
+
   // 休憩時間を正規化
   const normalizedBreak = normalizeBreakTime(breakTime);
-  
+
   // 実勤務時間を計算
   const workingMinutes = Math.max(0, totalMinutes - normalizedBreak.minutes);
-  
+
   return minutesToTimeString(workingMinutes);
 }
 
@@ -240,7 +243,7 @@ export function calculateWorkingTime(
 export function validateTimeData(
   startTime: TimeString,
   endTime: TimeString,
-  breakTime: BreakTime
+  breakTime: BreakTime,
 ): {
   isValid: boolean;
   errors: string[];
@@ -249,25 +252,29 @@ export function validateTimeData(
 
   // 出勤時間の検証
   if (!isValidTimeFormat(startTime)) {
-    errors.push('出勤時間の形式が正しくありません');
+    errors.push("出勤時間の形式が正しくありません");
   }
 
   // 退勤時間の検証
   if (!isValidTimeFormat(endTime)) {
-    errors.push('退勤時間の形式が正しくありません');
+    errors.push("退勤時間の形式が正しくありません");
   }
 
   // 休憩時間の検証
   const normalizedBreak = normalizeBreakTime(breakTime);
-  if (breakTime !== null && breakTime !== undefined && !normalizedBreak.isValid) {
-    errors.push('休憩時間の形式が正しくありません');
+  if (
+    breakTime !== null &&
+    breakTime !== undefined &&
+    !normalizedBreak.isValid
+  ) {
+    errors.push("休憩時間の形式が正しくありません");
   }
 
   // 時間の論理的整合性チェック
   if (errors.length === 0) {
     const totalMinutes = calculateTimeDifference(startTime, endTime);
     if (totalMinutes <= normalizedBreak.minutes) {
-      errors.push('休憩時間が勤務時間を超えています');
+      errors.push("休憩時間が勤務時間を超えています");
     }
   }
 
@@ -292,10 +299,10 @@ export function formatTimeForDisplay(
   options: {
     showSeconds?: boolean;
     use24Hour?: boolean;
-  } = {}
+  } = {},
 ): string {
   if (!isValidTimeFormat(timeStr)) {
-    return '00:00';
+    return "00:00";
   }
 
   const { showSeconds = false, use24Hour = true } = options;
@@ -305,9 +312,9 @@ export function formatTimeForDisplay(
   }
 
   // 12時間形式への変換（必要に応じて実装）
-  const [hours, minutes] = timeStr.split(':').map(num => parseInt(num, 10));
-  const period = hours >= 12 ? 'PM' : 'AM';
+  const [hours, minutes] = timeStr.split(":").map((num) => parseInt(num, 10));
+  const period = hours >= 12 ? "PM" : "AM";
   const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-  
-  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+
+  return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
 }

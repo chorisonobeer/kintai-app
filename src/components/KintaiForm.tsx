@@ -3,7 +3,13 @@
  * 2025-01-27T10:00+09:00
  * 変更概要: 勤務時間の自動計算機能を追加 - 出勤時間、退勤時間、休憩時間から勤務時間を計算してリアルタイム表示
  */
-import React, { useState, useEffect, useReducer, useTransition, useDeferredValue } from "react";
+import React, {
+  useState,
+  useEffect,
+  useReducer,
+  useTransition,
+  useDeferredValue,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import MobileDatePicker from "./MobileDatePicker";
 import MobileTimePicker from "./MobileTimePicker";
@@ -158,15 +164,15 @@ const calculateWorkingTime = (
 
 const KintaiForm: React.FC = () => {
   const navigate = useNavigate();
-  const { 
-    getKintaiDataByDate, 
-    refreshData, 
-    compareLogics, 
-    monthlyData, 
-    currentYear, 
-    currentMonth, 
-    isDateEntered, 
-    isDateEnteredNew 
+  const {
+    getKintaiDataByDate,
+    refreshData,
+    compareLogics,
+    monthlyData,
+    currentYear,
+    currentMonth,
+    isDateEntered,
+    isDateEnteredNew,
   } = useKintai();
 
   // ユーザー認証チェック
@@ -177,8 +183,8 @@ const KintaiForm: React.FC = () => {
   }, [navigate]);
 
   // React 18の並行機能を使用
-  const [isPending, startTransition] = useTransition();
-  
+  const [, startTransition] = useTransition();
+
   // フォーム状態管理
   const [formState, dispatch] = useReducer(editReducer, initialState);
   const deferredDate = useDeferredValue(formState.date);
@@ -190,7 +196,7 @@ const KintaiForm: React.FC = () => {
   const [location, setLocation] = useState(initialState.location);
   const [workingTime, setWorkingTime] = useState(""); // 勤務時間の状態を追加
   const [errors, setErrors] = useState<ValidationErrors>({});
-  
+
   // ローディング状態を管理
   const [isDataLoading, setIsDataLoading] = useState(false);
 
@@ -271,7 +277,7 @@ const KintaiForm: React.FC = () => {
       startTransition(() => {
         setIsDataLoading(true);
         setErrors({}); // 日付変更時にエラーをリセット
-        
+
         // 先に未入力状態にリセットして「ゆらぎ」を防ぐ
         setStartTime(initialState.startTime);
         setBreakTime(initialState.breakTime);
@@ -280,21 +286,21 @@ const KintaiForm: React.FC = () => {
         setWorkingTime("");
         dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
       });
-      
+
       try {
         // 瞬時判定: 既存のmonthlyDataから直接判定を実行
         console.log("⚡ 瞬時入力判定を実行中...");
         const comparison = compareLogics(new Date(deferredDate));
         const entered = comparison.legacy; // 現在は既存ロジックを使用
         console.log("✅ 瞬時判定完了:", { entered, date: deferredDate });
-        
+
         // 判定テーブル更新は非同期でバックグラウンド実行（UIをブロックしない）
         setTimeout(async () => {
           try {
             console.log("🔄 バックグラウンドで判定テーブルを更新中...");
             await refreshData();
             console.log("✅ バックグラウンド更新完了");
-            
+
             // 更新後のエビデンスを表示
             console.log("📊 更新後の判定テーブル状況:");
             console.log(`対象年月: ${currentYear}年${currentMonth}月`);
@@ -317,18 +323,20 @@ const KintaiForm: React.FC = () => {
         // デバッグログ: 今月の勤怠データを出力
         console.log("=== 今月の勤怠データ ===");
         console.log(`対象年月: ${currentYear}年${currentMonth}月`);
-        console.table(monthlyData.map(record => ({
-          日付: record.date,
-          出勤時間: record.startTime || "未入力",
-          休憩時間: record.breakTime || "未入力",
-          退勤時間: record.endTime || "未入力",
-          勤務時間: record.workingTime || "未計算",
-          勤務場所: record.location || "未選択"
-        })));
+        console.table(
+          monthlyData.map((record) => ({
+            日付: record.date,
+            出勤時間: record.startTime || "未入力",
+            休憩時間: record.breakTime || "未入力",
+            退勤時間: record.endTime || "未入力",
+            勤務時間: record.workingTime || "未計算",
+            勤務場所: record.location || "未選択",
+          })),
+        );
 
         // デバッグログ: データ入力判定テーブルを出力
         console.log("=== データ入力判定テーブル ===");
-        const entryStatusTable = monthlyData.map(record => {
+        const entryStatusTable = monthlyData.map((record) => {
           const recordDate = new Date(record.date);
           const legacyStatus = isDateEntered(recordDate);
           const newStatus = isDateEnteredNew(recordDate);
@@ -339,15 +347,19 @@ const KintaiForm: React.FC = () => {
             判定一致: legacyStatus === newStatus ? "一致" : "不一致",
             出勤時間有無: record.startTime ? "有" : "無",
             退勤時間有無: record.endTime ? "有" : "無",
-            休憩時間有無: record.breakTime ? "有" : "無"
+            休憩時間有無: record.breakTime ? "有" : "無",
           };
         });
         console.table(entryStatusTable);
 
         // 不一致がある場合は警告を出力
-        const mismatches = entryStatusTable.filter(item => item.判定一致 === "不一致");
+        const mismatches = entryStatusTable.filter(
+          (item) => item.判定一致 === "不一致",
+        );
         if (mismatches.length > 0) {
-          console.warn(`⚠️ 入力判定ロジックに不一致が${mismatches.length}件あります:`);
+          console.warn(
+            `⚠️ 入力判定ロジックに不一致が${mismatches.length}件あります:`,
+          );
           console.table(mismatches);
         } else {
           console.log("✅ 全ての日付で入力判定ロジックが一致しています");
@@ -359,18 +371,33 @@ const KintaiForm: React.FC = () => {
           if (data) {
             // 出勤時間が入力されている場合のみ保存済みとして扱う
             const hasStartTime = data.startTime && data.startTime.trim() !== "";
-            
+
             // 状態を一括で更新してレンダリング回数を最小化
             const breakTimeAsString = formatBreakTime(data.breakTime);
-            
+
             // React 18のバッチング機能を活用して状態更新を一括処理
             startTransition(() => {
-              setStartTime(data.startTime !== undefined ? data.startTime : initialState.startTime);
+              setStartTime(
+                data.startTime !== undefined
+                  ? data.startTime
+                  : initialState.startTime,
+              );
               setBreakTime(breakTimeAsString);
-              setEndTime(data.endTime !== undefined ? data.endTime : initialState.endTime);
-              setLocation(data.location !== undefined ? data.location : initialState.location);
+              setEndTime(
+                data.endTime !== undefined
+                  ? data.endTime
+                  : initialState.endTime,
+              );
+              setLocation(
+                data.location !== undefined
+                  ? data.location
+                  : initialState.location,
+              );
               setWorkingTime(data.workingTime || "");
-              dispatch({ type: EditActionType.CHECK_SAVED, payload: hasStartTime });
+              dispatch({
+                type: EditActionType.CHECK_SAVED,
+                payload: hasStartTime,
+              });
               setIsDataLoading(false);
             });
           } else {
@@ -397,28 +424,39 @@ const KintaiForm: React.FC = () => {
     if (deferredDate) {
       loadDateInfo();
     }
-  }, [deferredDate, monthlyData, currentYear, currentMonth, compareLogics, getKintaiDataByDate, isDateEntered, isDateEnteredNew]);
+  }, [
+    deferredDate,
+    monthlyData,
+    currentYear,
+    currentMonth,
+    compareLogics,
+    getKintaiDataByDate,
+    isDateEntered,
+    isDateEnteredNew,
+  ]);
 
   // スライドアニメーション用の状態
   const [isAnimating, setIsAnimating] = useState(false);
-  const [animationDirection, setAnimationDirection] = useState<'left' | 'right'>('right');
-  const [previousDate, setPreviousDate] = useState(formState.date);
+  const [animationDirection, setAnimationDirection] = useState<
+    "left" | "right"
+  >("right");
+  const [_previousDate, setPreviousDate] = useState(formState.date);
 
   // 入力値変更ハンドラー
   const handleDateChange = (date: string) => {
     // 日付の変更方向を判定
     const currentDateObj = new Date(formState.date);
     const newDateObj = new Date(date);
-    const direction = newDateObj > currentDateObj ? 'right' : 'left';
-    
+    const direction = newDateObj > currentDateObj ? "right" : "left";
+
     setAnimationDirection(direction);
     setPreviousDate(formState.date);
     setIsAnimating(true);
-    
+
     // アニメーション開始後に日付を更新
     setTimeout(() => {
       dispatch({ type: EditActionType.DATE_CHANGE, payload: date });
-      
+
       // アニメーション終了
       setTimeout(() => {
         setIsAnimating(false);
@@ -554,21 +592,25 @@ const KintaiForm: React.FC = () => {
       </div>
 
       {/* コンテンツ部分（スライドアニメーション対象） */}
-      <div className={`kintai-form-content ${
-        isAnimating ? `animating slide-out-${animationDirection}` : ''
-      }`}>
-
+      <div
+        className={`kintai-form-content ${
+          isAnimating ? `animating slide-out-${animationDirection}` : ""
+        }`}
+      >
         {/* データ読み込み中の表示 */}
         {isDataLoading && (
-          <div className="loading-message" style={{ 
-            padding: '8px 16px', 
-            backgroundColor: '#f0f8ff', 
-            border: '1px solid #e0e0e0', 
-            borderRadius: '4px', 
-            margin: '8px 0',
-            fontSize: '14px',
-            color: '#666'
-          }}>
+          <div
+            className="loading-message"
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#f0f8ff",
+              border: "1px solid #e0e0e0",
+              borderRadius: "4px",
+              margin: "8px 0",
+              fontSize: "14px",
+              color: "#666",
+            }}
+          >
             📅 データを読み込み中...
           </div>
         )}
@@ -577,80 +619,125 @@ const KintaiForm: React.FC = () => {
         {tooOldDateWarning && (
           <div className="warning-message">
             ⚠️ 3日以上前の日付は編集できません
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* 出勤時間 */}
-      <MobileTimePicker
-        label="出勤時間"
-        value={startTime}
-        onChange={handleStartTimeChange}
-        disabled={
-          isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
-        }
-      />
-      {errors.startTime && (
-        <div className="error-message">{errors.startTime}</div>
-      )}
-
-      {/* 休憩時間 */}
-      <MobileBreakPicker
-        value={breakTime}
-        onChange={handleBreakTimeChange}
-        disabled={
-          isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
-        }
-      />
-      {errors.breakTime && (
-        <div className="error-message">{errors.breakTime}</div>
-      )}
-
-      {/* 退勤時間 */}
-      <MobileTimePicker
-        label="退勤時間"
-        value={endTime}
-        onChange={handleEndTimeChange}
-        disabled={
-          isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
-        }
-      />
-      {errors.endTime && <div className="error-message">{errors.endTime}</div>}
-
-      {/* 勤務時間 */}
-      <div className="form-group">
-        <label>勤務時間</label>
-        <div className="time-display working-time-display">
-          {workingTime ||
-            (formState.isSaved && !formState.isEditing ? "-" : "0:00")}
-        </div>
-      </div>
-
-      {/* 勤務場所 */}
-      <div className="form-group">
-        <label>勤務場所</label>
-        <select
-          value={location}
-          onChange={handleLocationChange}
+        {/* 出勤時間 */}
+        <MobileTimePicker
+          label="出勤時間"
+          value={startTime}
+          onChange={handleStartTimeChange}
           disabled={
-            isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
+            isDataLoading ||
+            (formState.isSaved && !formState.isEditing) ||
+            isVeryOldDate()
           }
-          className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""}`}
-        >
-          <option value="">未選択</option>
-          <option value="田んぼ">田んぼ</option>
-          <option value="柿農園">柿農園</option>
-          <option value="事務所">事務所</option>
-          <option value="その他">その他</option>
-        </select>
-      </div>
+        />
+        {errors.startTime && (
+          <div className="error-message">{errors.startTime}</div>
+        )}
 
-      {/* エラーメッセージ */}
-      {errors.general && <div className="error-message">{errors.general}</div>}
+        {/* 休憩時間 */}
+        <MobileBreakPicker
+          value={breakTime}
+          onChange={handleBreakTimeChange}
+          disabled={
+            isDataLoading ||
+            (formState.isSaved && !formState.isEditing) ||
+            isVeryOldDate()
+          }
+        />
+        {errors.breakTime && (
+          <div className="error-message">{errors.breakTime}</div>
+        )}
 
-      {/* 保存/編集ボタン */}
-      <div className="button-container">
-        {formState.isEditing ? (
-          <>
+        {/* 退勤時間 */}
+        <MobileTimePicker
+          label="退勤時間"
+          value={endTime}
+          onChange={handleEndTimeChange}
+          disabled={
+            isDataLoading ||
+            (formState.isSaved && !formState.isEditing) ||
+            isVeryOldDate()
+          }
+        />
+        {errors.endTime && (
+          <div className="error-message">{errors.endTime}</div>
+        )}
+
+        {/* 勤務時間 */}
+        <div className="form-group">
+          <label>勤務時間</label>
+          <div className="time-display working-time-display">
+            {workingTime ||
+              (formState.isSaved && !formState.isEditing ? "-" : "0:00")}
+          </div>
+        </div>
+
+        {/* 勤務場所 */}
+        <div className="form-group">
+          <label>勤務場所</label>
+          <select
+            value={location}
+            onChange={handleLocationChange}
+            disabled={
+              isDataLoading ||
+              (formState.isSaved && !formState.isEditing) ||
+              isVeryOldDate()
+            }
+            className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""}`}
+          >
+            <option value="">未選択</option>
+            <option value="田んぼ">田んぼ</option>
+            <option value="柿農園">柿農園</option>
+            <option value="事務所">事務所</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+
+        {/* エラーメッセージ */}
+        {errors.general && (
+          <div className="error-message">{errors.general}</div>
+        )}
+
+        {/* 保存/編集ボタン */}
+        <div className="button-container">
+          {formState.isEditing ? (
+            <>
+              <button
+                className="btn btn-edit"
+                onClick={handleSubmit}
+                disabled={
+                  isSubmitting ||
+                  Object.keys(errors).length > 0 ||
+                  isVeryOldDate()
+                }
+              >
+                保存する
+              </button>
+              <button
+                className="btn"
+                onClick={handleCancelEdit}
+                style={{ marginTop: "8px", backgroundColor: "#9e9e9e" }}
+                disabled={isSubmitting}
+              >
+                キャンセル
+              </button>
+            </>
+          ) : formState.isSaved ? (
+            <button
+              className={getButtonClassName()}
+              onTouchStart={isVeryOldDate() ? undefined : handleLongPressStart}
+              onTouchEnd={isVeryOldDate() ? undefined : handleLongPressEnd}
+              onMouseDown={isVeryOldDate() ? undefined : handleLongPressStart}
+              onMouseUp={isVeryOldDate() ? undefined : handleLongPressEnd}
+              onMouseLeave={isVeryOldDate() ? undefined : handleLongPressEnd}
+              disabled={isSubmitting || isVeryOldDate()}
+            >
+              {getSaveButtonText()}
+            </button>
+          ) : (
             <button
               className="btn btn-edit"
               onClick={handleSubmit}
@@ -662,39 +749,8 @@ const KintaiForm: React.FC = () => {
             >
               保存する
             </button>
-            <button
-              className="btn"
-              onClick={handleCancelEdit}
-              style={{ marginTop: "8px", backgroundColor: "#9e9e9e" }}
-              disabled={isSubmitting}
-            >
-              キャンセル
-            </button>
-          </>
-        ) : formState.isSaved ? (
-          <button
-            className={getButtonClassName()}
-            onTouchStart={isVeryOldDate() ? undefined : handleLongPressStart}
-            onTouchEnd={isVeryOldDate() ? undefined : handleLongPressEnd}
-            onMouseDown={isVeryOldDate() ? undefined : handleLongPressStart}
-            onMouseUp={isVeryOldDate() ? undefined : handleLongPressEnd}
-            onMouseLeave={isVeryOldDate() ? undefined : handleLongPressEnd}
-            disabled={isSubmitting || isVeryOldDate()}
-          >
-            {getSaveButtonText()}
-          </button>
-        ) : (
-          <button
-            className="btn btn-edit"
-            onClick={handleSubmit}
-            disabled={
-              isSubmitting || Object.keys(errors).length > 0 || isVeryOldDate()
-            }
-          >
-            保存する
-          </button>
-        )}
-      </div>
+          )}
+        </div>
       </div>
     </div>
   );

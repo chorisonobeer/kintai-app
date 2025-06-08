@@ -67,8 +67,6 @@ export const parseTimeStringToMinutes = (timeString: string): number => {
   return hours * 60 + minutes;
 };
 
-
-
 /**
  * 日付が許容範囲内かどうかチェックする
  * 現在より2日前から当日までが有効

@@ -19,7 +19,9 @@ import { KintaiData } from "../types";
  */
 export class EntryStatusManager {
   private cache: MonthlyEntryCache | null = null;
+
   private options: EntryStatusOptions;
+
   private readonly STORAGE_KEY = "kintai_entry_status_cache";
 
   constructor(options: EntryStatusOptions = {}) {
@@ -229,7 +231,150 @@ export class EntryStatusManager {
     return !!(hasStartTime || hasEndTime);
   }
 
+  /**
+   * 差分更新機能 - 最終同期時刻以降の変更のみを処理
+   * @param yearMonth YYYY-MM形式の年月
+   * @param recentData 最近の勤怠データ配列
+   * @param lastSyncTime 最終同期時刻（省略時は現在のキャッシュの最終同期時刻を使用）
+   * @returns 更新された項目数
+   */
+  async syncIncrementalChanges(
+    yearMonth: string,
+    recentData: KintaiData[],
+    lastSyncTime?: number,
+  ): Promise<number> {
+    try {
+      this.debugLog(`Starting incremental sync for ${yearMonth}`);
 
+      // キャッシュが存在しない場合は全体初期化
+      if (!this.cache || this.cache.yearMonth !== yearMonth) {
+        this.debugLog("No cache found, performing full initialization");
+        await this.initializeMonth(yearMonth, recentData);
+        return recentData.length;
+      }
+
+      const syncTime = lastSyncTime || this.cache.lastSync;
+      let updatedCount = 0;
+
+      // 最終同期時刻以降に変更されたデータのみを処理
+      const changedData = this.detectChanges(recentData, syncTime);
+      this.debugLog(
+        `Found ${changedData.length} changed entries since last sync`,
+      );
+
+      for (const data of changedData) {
+        const hasEntry = this.determineEntryStatus(data);
+        const currentStatus = this.cache.entries.get(data.date);
+
+        // 状態が変更された場合のみ更新
+        if (!currentStatus || currentStatus.hasEntry !== hasEntry) {
+          await this.updateEntryStatus(data.date, data);
+          updatedCount++;
+          this.debugLog(`Updated entry status for ${data.date}: ${hasEntry}`);
+        }
+      }
+
+      // 最終同期時刻を更新
+      this.cache.lastSync = Date.now();
+      await this.saveToStorage();
+
+      this.debugLog(
+        `Incremental sync completed. Updated ${updatedCount} entries`,
+      );
+      return updatedCount;
+    } catch (error) {
+      console.error("Failed to sync incremental changes:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 変更検出ロジック - 最終同期時刻以降に変更されたデータを特定
+   * @param data 勤怠データ配列
+   * @param lastSyncTime 最終同期時刻
+   * @returns 変更されたデータ配列
+   */
+  private detectChanges(
+    data: KintaiData[],
+    lastSyncTime: number,
+  ): KintaiData[] {
+    const changedData: KintaiData[] = [];
+    const syncThreshold = new Date(lastSyncTime);
+
+    for (const entry of data) {
+      const hasRecentChanges = this.hasRecentModifications(
+        entry,
+        syncThreshold,
+      );
+
+      if (hasRecentChanges) {
+        changedData.push(entry);
+      }
+    }
+
+    return changedData;
+  }
+
+  /**
+   * エントリが最近変更されたかどうかを判定
+   * @param entry 勤怠データ
+   * @param threshold 閾値時刻
+   * @returns 最近変更されたかどうか
+   */
+  private hasRecentModifications(entry: KintaiData, threshold: Date): boolean {
+    // 実際のプロジェクトでは、データにlastModifiedフィールドがある場合はそれを使用
+    // ここでは簡易的な判定ロジックを実装
+
+    const entryDate = new Date(entry.date);
+
+    // 閾値時刻以降のデータは変更可能性があるとみなす
+    if (entryDate >= threshold) {
+      return true;
+    }
+
+    // 当日のデータは常に変更可能性があるとみなす
+    const today = new Date();
+    if (entryDate.toDateString() === today.toDateString()) {
+      return true;
+    }
+
+    // 過去のデータでも、状態が変更された場合は変更とみなす
+    const currentStatus = this.cache?.entries.get(entry.date);
+    const newStatus = this.determineEntryStatus(entry);
+
+    return !currentStatus || currentStatus.hasEntry !== newStatus;
+  }
+
+  /**
+   * 最終同期時刻の取得
+   * @returns 最終同期時刻（キャッシュが存在しない場合はnull）
+   */
+  getLastSyncTime(): number | null {
+    return this.cache?.lastSync || null;
+  }
+
+  /**
+   * 同期状態の確認
+   * @returns 同期状態情報
+   */
+  getSyncStatus(): {
+    isInitialized: boolean;
+    lastSync: number | null;
+    yearMonth: string | null;
+    entryCount: number;
+    cacheAge: number; // ミリ秒
+  } {
+    const now = Date.now();
+    const lastSync = this.getLastSyncTime();
+
+    return {
+      isInitialized: !!this.cache,
+      lastSync,
+      yearMonth: this.cache?.yearMonth || null,
+      entryCount: this.cache?.entries.size || 0,
+      cacheAge: lastSync ? now - lastSync : 0,
+    };
+  }
 
   /**
    * 既存の判定ロジックとの比較テスト（開発用）

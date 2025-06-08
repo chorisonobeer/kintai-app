@@ -11,7 +11,6 @@
 
 import { KintaiData, KintaiRecord } from "../types";
 
-
 // Vite環境変数から開発モードかどうかを判定
 const isDevelopment = import.meta.env.DEV;
 
@@ -26,10 +25,7 @@ const DEV_PROXY_URL = "/api/gas"; // 開発環境でプロキシ経由でGASを�
 // デバッグ用ログ
 console.log("=== API Service 初期化 ===");
 console.log("isDevelopment:", isDevelopment);
-console.log(
-  "import.meta.env.VITE_GAS_API_URL:",
-  import.meta.env.VITE_GAS_API_URL,
-);
+console.log("VITE_GAS_API_URL:", import.meta.env.VITE_GAS_API_URL);
 console.log("GAS_API_URL:", GAS_API_URL);
 console.log("FUNC_URL:", FUNC_URL);
 console.log("=========================");
@@ -127,7 +123,7 @@ async function fetchWithRetry(
 
       // 最後の試行でない場合は少し待機
       if (attempt < maxRetries) {
-        const delay = Math.min(1000 * Math.pow(2, attempt), 5000); // 指数バックオフ（最大5秒）
+        const delay = Math.min(1000 * 2 ** attempt, 5000); // 指数バックオフ（最大5秒）
         console.log(`${delay}ms後にリトライします...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }

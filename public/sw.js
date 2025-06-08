@@ -86,6 +86,130 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// バックグラウンド同期の設定
+const SYNC_TAG = 'kintai-background-sync';
+const SYNC_INTERVAL = 5 * 60 * 1000; // 5分
+let syncTimer = null;
+
+// バックグラウンド同期の登録
+self.addEventListener('sync', (event) => {
+  console.log('Background sync event:', event.tag);
+  
+  if (event.tag === SYNC_TAG) {
+    event.waitUntil(performBackgroundSync());
+  }
+});
+
+// 定期同期スケジューラー
+function schedulePeriodicSync() {
+  if (syncTimer) {
+    clearTimeout(syncTimer);
+  }
+  
+  syncTimer = setTimeout(() => {
+    // Service Worker内では直接的なAPIコールは制限されるため、
+    // メインスレッドに同期要求を送信
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'BACKGROUND_SYNC_REQUEST',
+          timestamp: Date.now()
+        });
+      });
+    });
+    
+    // 次回の同期をスケジュール
+    schedulePeriodicSync();
+  }, SYNC_INTERVAL);
+}
+
+// バックグラウンド同期処理
+async function performBackgroundSync() {
+  try {
+    console.log('Performing background sync...');
+    
+    // オフライン状態の確認
+    if (!navigator.onLine) {
+      console.log('Offline - skipping background sync');
+      return;
+    }
+    
+    // メインスレッドに同期要求を送信
+    const clients = await self.clients.matchAll();
+    if (clients.length > 0) {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'PERFORM_SYNC',
+          timestamp: Date.now()
+        });
+      });
+    }
+    
+    console.log('Background sync completed');
+  } catch (error) {
+    console.error('Background sync failed:', error);
+    throw error;
+  }
+}
+
+// メインスレッドからのメッセージ処理
+self.addEventListener('message', (event) => {
+  const { type, data } = event.data;
+  
+  switch (type) {
+    case 'REGISTER_SYNC':
+      // バックグラウンド同期を登録
+      if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+        self.registration.sync.register(SYNC_TAG)
+          .then(() => {
+            console.log('Background sync registered');
+            schedulePeriodicSync();
+          })
+          .catch(error => {
+            console.error('Failed to register background sync:', error);
+          });
+      }
+      break;
+      
+    case 'UNREGISTER_SYNC':
+      // 定期同期を停止
+      if (syncTimer) {
+        clearTimeout(syncTimer);
+        syncTimer = null;
+        console.log('Periodic sync stopped');
+      }
+      break;
+      
+    case 'SYNC_STATUS_UPDATE':
+      // 同期状態の更新（ログ出力など）
+      console.log('Sync status update:', data);
+      break;
+      
+    default:
+      console.log('Unknown message type:', type);
+  }
+});
+
+// オンライン/オフライン状態の監視
+self.addEventListener('online', () => {
+  console.log('Network online - resuming background sync');
+  schedulePeriodicSync();
+  
+  // オンライン復帰時に即座に同期を実行
+  self.registration.sync.register(SYNC_TAG)
+    .catch(error => {
+      console.error('Failed to register sync on online:', error);
+    });
+});
+
+self.addEventListener('offline', () => {
+  console.log('Network offline - pausing background sync');
+  if (syncTimer) {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+  }
+});
+
 // プッシュ通知の処理（将来の拡張用）
 self.addEventListener('push', (event) => {
   const options = {

@@ -96,7 +96,7 @@ export interface UnifiedEntryStatus {
   /** 入力済みかどうか */
   hasEntry: boolean;
   /** 判定ソース */
-  source: 'cache' | 'calculation' | 'unknown';
+  source: "cache" | "calculation" | "unknown";
   /** 最終更新日時 */
   lastUpdated?: number;
 }
@@ -175,5 +175,5 @@ export function isValidBreakTime(breakTime: BreakTime): boolean {
  * "00:00"は休憩なしとして扱う
  */
 export function hasActualBreakTime(breakTime: BreakTime): boolean {
-  return isValidTimeString(breakTime) && breakTime !== '00:00';
+  return isValidTimeString(breakTime) && breakTime !== "00:00";
 }
