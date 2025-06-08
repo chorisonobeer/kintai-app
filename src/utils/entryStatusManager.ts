@@ -221,44 +221,15 @@ export class EntryStatusManager {
     // 出勤時間の判定
     const hasStartTime = data.startTime && data.startTime.trim() !== "";
 
-    // 休憩時間の判定（文字列または数値に対応）
-    const hasBreakTime = this.hasValidBreakTime(data.breakTime);
-
     // 退勤時間の判定
     const hasEndTime = data.endTime && data.endTime.trim() !== "";
 
-    // いずれかが入力されていれば入力済みとする
-    return !!(hasStartTime || hasBreakTime || hasEndTime);
+    // 出勤時間または退勤時間が入力されていれば入力済みとする
+    // 休憩時間は入力判定から完全に除外する
+    return !!(hasStartTime || hasEndTime);
   }
 
-  /**
-   * 休憩時間の有効性を判定
-   * @param breakTime 休憩時間（文字列または数値）
-   * @returns 有効な休憩時間が入力されているか
-   */
-  private hasValidBreakTime(
-    breakTime: string | number | undefined | null,
-  ): boolean {
-    if (breakTime === undefined || breakTime === null) {
-      return false;
-    }
 
-    // 数値の場合
-    if (typeof breakTime === "number") {
-      return breakTime > 0;
-    }
-
-    // 文字列の場合
-    if (typeof breakTime === "string") {
-      const trimmed = breakTime.trim();
-      if (trimmed === "" || trimmed === "0:00" || trimmed === "00:00") {
-        return false;
-      }
-      return true;
-    }
-
-    return false;
-  }
 
   /**
    * 既存の判定ロジックとの比較テスト（開発用）

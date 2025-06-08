@@ -1,7 +1,7 @@
 /**
  * /src/contexts/KintaiContext.tsx
- * 2025-05-04T12:00+09:00
- * 変更概要: 新規追加 - 勤怠データ共有のためのコンテキスト
+ * 2025-01-XX
+ * 変更概要: Phase 2 - 新しい入力判定ロジック統合と並行運用
  */
 
 import React, {
@@ -13,6 +13,7 @@ import React, {
 } from "react";
 import { getMonthlyData } from "../utils/apiService";
 import { KintaiRecord } from "../types";
+import { entryStatusManager } from "../utils/entryStatusManager";
 
 interface KintaiContextType {
   monthlyData: KintaiRecord[];
@@ -23,12 +24,20 @@ interface KintaiContextType {
     forceRefresh?: boolean,
   ) => Promise<void>;
   isDateEntered: (date: Date) => boolean;
+  isDateEnteredNew: (date: Date) => boolean; // 新しい判定ロジック
   getKintaiDataByDate: (dateString: string) => KintaiRecord | null;
   currentYear: number;
   currentMonth: number;
   setCurrentYear: (year: number) => void;
   setCurrentMonth: (month: number) => void;
   refreshData: () => Promise<void>;
+  // 並行運用のための機能
+  compareLogics: (date: Date) => {
+    legacy: boolean;
+    new: boolean;
+    match: boolean;
+  };
+  initializeEntryStatusCache: () => Promise<void>;
 }
 
 const KintaiContext = createContext<KintaiContextType | undefined>(undefined);
@@ -71,11 +80,36 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
       const data = await getMonthlyData(year, month, forceRefresh);
       setMonthlyData(data);
       console.log(`データ取得完了: ${data.length}件`);
+
+      // 新しい入力判定ロジック用のキャッシュを初期化
+      await initializeEntryStatusCache();
     } catch (error) {
       console.error(`データ取得エラー: ${year}年${month}月`, error);
       setMonthlyData([]);
     } finally {
       setIsDataLoading(false);
+    }
+  };
+
+  // 新しい入力判定ロジック用キャッシュの初期化
+  const initializeEntryStatusCache = async () => {
+    try {
+      const yearMonth = `${currentYear}-${currentMonth.toString().padStart(2, "0")}`;
+
+      // KintaiRecord[] を KintaiData[] に変換
+      const convertedData = monthlyData.map((record) => ({
+        date: record.date,
+        startTime: record.startTime,
+        breakTime: record.breakTime, // 元の値をそのまま渡す（空文字列やnullも保持）
+        endTime: record.endTime,
+        location: record.location || "",
+        workingTime: record.workingTime,
+      }));
+
+      await entryStatusManager.initializeMonth(yearMonth, convertedData);
+      console.log(`EntryStatusManager初期化完了: ${yearMonth}`);
+    } catch (error) {
+      console.error("EntryStatusManager初期化エラー:", error);
     }
   };
 
@@ -97,7 +131,7 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
     await fetchMonthlyData(currentYear, currentMonth, true);
   };
 
-  // 日付の入力済み状態確認関数
+  // 日付の入力済み状態確認関数（既存ロジック）
   const isDateEntered = (date: Date): boolean => {
     const dateStr = formatDateForComparison(date);
     const record = monthlyData.find((record) => record.date === dateStr);
@@ -107,15 +141,40 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
     }
 
     // 実際にデータが入力されているかを確認
-    // 出勤時間、休憩時間、退勤時間のいずれかが入力されていれば「入力済み」とする
+    // 出勤時間または退勤時間が入力されていれば「入力済み」とする
+    // 休憩時間は0の可能性もあるため、入力判定には使用しない
     const hasStartTime = record.startTime && record.startTime.trim() !== "";
-    const hasBreakTime =
-      record.breakTime !== undefined &&
-      record.breakTime !== null &&
-      record.breakTime > 0;
     const hasEndTime = record.endTime && record.endTime.trim() !== "";
 
-    return !!(hasStartTime || hasBreakTime || hasEndTime);
+    return !!(hasStartTime || hasEndTime);
+  };
+
+  // 日付の入力済み状態確認関数（新しいロジック）
+  const isDateEnteredNew = (date: Date): boolean => {
+    const dateStr = formatDateForComparison(date);
+    const result = entryStatusManager.isDateEntered(dateStr);
+    return result.hasEntry;
+  };
+
+  // 既存ロジックと新ロジックの比較
+  const compareLogics = (
+    date: Date,
+  ): { legacy: boolean; new: boolean; match: boolean } => {
+    const legacyResult = isDateEntered(date);
+    const newResult = isDateEnteredNew(date);
+    const match = legacyResult === newResult;
+
+    // 不整合がある場合はログ出力
+    if (!match) {
+      const dateStr = formatDateForComparison(date);
+      console.warn(`入力判定ロジック不整合検出: ${dateStr}`, {
+        legacy: legacyResult,
+        new: newResult,
+        date: dateStr,
+      });
+    }
+
+    return { legacy: legacyResult, new: newResult, match };
   };
 
   // monthlyDataから特定日のデータを取得する関数
@@ -132,17 +191,20 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
     return `${year}-${month}-${day}`;
   };
 
-  const value = {
+  const value: KintaiContextType = {
     monthlyData,
     isDataLoading,
     fetchMonthlyData,
     isDateEntered,
+    isDateEnteredNew,
     getKintaiDataByDate,
     currentYear,
     currentMonth,
     setCurrentYear,
     setCurrentMonth,
     refreshData,
+    compareLogics,
+    initializeEntryStatusCache,
   };
 
   return (

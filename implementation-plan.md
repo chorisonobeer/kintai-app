@@ -46,28 +46,30 @@
 
 ---
 
-## Phase 2: 段階的移行 ⏳ **未着手**
+## Phase 2: 新判定ロジック統合と並行運用 🔄
+**ステータス**: 完了
 
-### 2.1 既存APIとの並行運用 ⏳ **未着手**
-- [ ] 新判定テーブルの導入
-- [ ] 既存`isEnteredDate()`との並行検証
-- [ ] 不整合時の既存ロジック優先処理
-- [ ] ログ出力による動作確認
+### 2.1 新判定テーブルの導入
+- [x] `EntryStatusManager` クラス実装
+- [x] 判定メソッド (`isDateEntered`)
+- [x] キャッシュ機能 (`MonthlyEntryCache`)
+- [x] テストファイル作成
 
-**ファイル:** `src/utils/apiService.ts` (更新)
+### 2.2 `KintaiForm.tsx` での並行運用
+- [x] 既存ロジックと新ロジックの同時実行
+- [x] 不整合検出とログ出力
+- [x] 開発環境での比較結果表示
 
-### 2.2 データ整合性チェック機能 ⏳ **未着手**
-- [ ] `validateEntryCache` 関数の実装
-- [ ] 不整合検出ロジック
-- [ ] 自動修復機能
-- [ ] エラーハンドリング
+### 2.3 `KintaiContext.tsx` での状態管理統合
+- [x] 新判定ロジックのコンテキスト統合
+- [x] 既存APIとの互換性維持
+- [x] エラーハンドリング強化
 
-**ファイル:** `src/utils/entryStatusManager.ts`
-
-### 2.3 コンポーネント統合 ⏳ **未着手**
-- [ ] `KintaiForm.tsx` での新判定ロジック使用
-- [ ] `MonthlyView.tsx` での表示更新
-- [ ] `KintaiContext.tsx` での状態管理統合
+### 2.4 型安全性とコード品質
+- [x] TypeScript型エラー解決
+- [x] Prettierフォーマット適用
+- [x] データ変換ロジック実装（KintaiRecord → KintaiData）
+- [ ] ビルドエラー解決（Rollup関連)
 
 **ファイル:** 
 - `src/components/KintaiForm.tsx` (更新)

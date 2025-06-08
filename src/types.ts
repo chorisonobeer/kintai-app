@@ -72,7 +72,7 @@ export type KintaiRecord = {
   userName: string;
   userId: string;
   startTime: string;
-  breakTime: number | undefined; // スプレッドシートのD列が空の場合はundefined
+  breakTime: string; // HH:mm形式の文字列（他の時間フィールドと統一）
   endTime: string;
   workingTime: string; // ex: '8.0h' - スプレッドシートのF列から取得
   location?: string;

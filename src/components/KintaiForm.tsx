@@ -3,7 +3,7 @@
  * 2025-01-27T10:00+09:00
  * 変更概要: 勤務時間の自動計算機能を追加 - 出勤時間、退勤時間、休憩時間から勤務時間を計算してリアルタイム表示
  */
-import React, { useState, useEffect, useReducer } from "react";
+import React, { useState, useEffect, useReducer, useTransition, useDeferredValue } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileDatePicker from "./MobileDatePicker";
 import MobileTimePicker from "./MobileTimePicker";
@@ -158,7 +158,16 @@ const calculateWorkingTime = (
 
 const KintaiForm: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshData, isDateEntered, getKintaiDataByDate } = useKintai();
+  const { 
+    getKintaiDataByDate, 
+    refreshData, 
+    compareLogics, 
+    monthlyData, 
+    currentYear, 
+    currentMonth, 
+    isDateEntered, 
+    isDateEnteredNew 
+  } = useKintai();
 
   // ユーザー認証チェック
   useEffect(() => {
@@ -167,8 +176,12 @@ const KintaiForm: React.FC = () => {
     }
   }, [navigate]);
 
+  // React 18の並行機能を使用
+  const [isPending, startTransition] = useTransition();
+  
   // フォーム状態管理
   const [formState, dispatch] = useReducer(editReducer, initialState);
+  const deferredDate = useDeferredValue(formState.date);
 
   // フォーム値とバリデーション
   const [startTime, setStartTime] = useState(initialState.startTime);
@@ -177,6 +190,9 @@ const KintaiForm: React.FC = () => {
   const [location, setLocation] = useState(initialState.location);
   const [workingTime, setWorkingTime] = useState(""); // 勤務時間の状態を追加
   const [errors, setErrors] = useState<ValidationErrors>({});
+  
+  // ローディング状態を管理
+  const [isDataLoading, setIsDataLoading] = useState(false);
 
   /**
    * 休憩時間の表示フォーマット
@@ -248,87 +264,166 @@ const KintaiForm: React.FC = () => {
 
   // 日付に入力済みフラグチェック
 
-  // 日付変更時
+  // 日付変更時（React 18の並行機能を使用）
   useEffect(() => {
     const loadDateInfo = async () => {
-      setErrors({}); // 日付変更時にエラーをリセット
-      try {
-        const entered = isDateEntered(new Date(formState.date));
-
-        if (entered) {
-          const data = getKintaiDataByDate(formState.date);
-
-          if (data) {
-            // 出勤時間が入力されている場合のみ保存済みとして扱う
-            // 空文字や未定義は未入力として扱う
-            const hasStartTime = data.startTime && data.startTime.trim() !== "";
-            dispatch({
-              type: EditActionType.CHECK_SAVED,
-              payload: hasStartTime,
-            });
-
-            // apiService から "HH:mm" 形式で渡ってくることを期待
-            setStartTime(
-              data.startTime !== undefined
-                ? data.startTime
-                : initialState.startTime,
-            );
-
-            // apiService から "HH:mm" 形式で渡ってくることを期待
-            // breakTime の処理 - 月次ビューと同じロジックを使用
-            const breakTimeAsString = formatBreakTime(data.breakTime);
-            setBreakTime(breakTimeAsString);
-
-            // apiService から "HH:mm" 形式で渡ってくることを期待
-            setEndTime(
-              data.endTime !== undefined ? data.endTime : initialState.endTime,
-            );
-            setLocation(
-              data.location !== undefined
-                ? data.location
-                : initialState.location,
-            );
-            // 保存済みデータの場合は、サーバーから取得した勤務時間を使用
-            setWorkingTime(data.workingTime || "");
-
-            // フォームに値を設定完了
-          } else {
-            dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
-            setStartTime(initialState.startTime);
-            setBreakTime(initialState.breakTime);
-            setEndTime(initialState.endTime);
-            setLocation(initialState.location);
-            setWorkingTime(""); // 勤務時間もリセット
-          }
-        } else {
-          dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
-          setStartTime(initialState.startTime);
-          setBreakTime(initialState.breakTime);
-          setEndTime(initialState.endTime);
-          setLocation(initialState.location);
-          setWorkingTime(""); // 勤務時間もリセット
-        }
-      } catch (error) {
-        setErrors({ general: "データの読み込みに失敗しました。" });
+      // UIの応答性を保つため、重い処理をstartTransitionで包む
+      startTransition(() => {
+        setIsDataLoading(true);
+        setErrors({}); // 日付変更時にエラーをリセット
+        
+        // 先に未入力状態にリセットして「ゆらぎ」を防ぐ
         setStartTime(initialState.startTime);
         setBreakTime(initialState.breakTime);
         setEndTime(initialState.endTime);
         setLocation(initialState.location);
-        setWorkingTime(""); // 勤務時間もリセット
+        setWorkingTime("");
+        dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
+      });
+      
+      try {
+        // 瞬時判定: 既存のmonthlyDataから直接判定を実行
+        console.log("⚡ 瞬時入力判定を実行中...");
+        const comparison = compareLogics(new Date(deferredDate));
+        const entered = comparison.legacy; // 現在は既存ロジックを使用
+        console.log("✅ 瞬時判定完了:", { entered, date: deferredDate });
+        
+        // 判定テーブル更新は非同期でバックグラウンド実行（UIをブロックしない）
+        setTimeout(async () => {
+          try {
+            console.log("🔄 バックグラウンドで判定テーブルを更新中...");
+            await refreshData();
+            console.log("✅ バックグラウンド更新完了");
+            
+            // 更新後のエビデンスを表示
+            console.log("📊 更新後の判定テーブル状況:");
+            console.log(`対象年月: ${currentYear}年${currentMonth}月`);
+            console.log(`総データ件数: ${monthlyData.length}件`);
+          } catch (bgError) {
+            console.warn("バックグラウンド更新エラー:", bgError);
+          }
+        }, 0);
+
+        // 開発環境でのみ比較結果をログ出力
+        if (process.env.NODE_ENV === "development" && !comparison.match) {
+          console.log("入力判定ロジック比較結果:", {
+            date: formState.date,
+            legacy: comparison.legacy,
+            new: comparison.new,
+            match: comparison.match,
+          });
+        }
+
+        // デバッグログ: 今月の勤怠データを出力
+        console.log("=== 今月の勤怠データ ===");
+        console.log(`対象年月: ${currentYear}年${currentMonth}月`);
+        console.table(monthlyData.map(record => ({
+          日付: record.date,
+          出勤時間: record.startTime || "未入力",
+          休憩時間: record.breakTime || "未入力",
+          退勤時間: record.endTime || "未入力",
+          勤務時間: record.workingTime || "未計算",
+          勤務場所: record.location || "未選択"
+        })));
+
+        // デバッグログ: データ入力判定テーブルを出力
+        console.log("=== データ入力判定テーブル ===");
+        const entryStatusTable = monthlyData.map(record => {
+          const recordDate = new Date(record.date);
+          const legacyStatus = isDateEntered(recordDate);
+          const newStatus = isDateEnteredNew(recordDate);
+          return {
+            日付: record.date,
+            既存ロジック: legacyStatus ? "入力済み" : "未入力",
+            新ロジック: newStatus ? "入力済み" : "未入力",
+            判定一致: legacyStatus === newStatus ? "一致" : "不一致",
+            出勤時間有無: record.startTime ? "有" : "無",
+            退勤時間有無: record.endTime ? "有" : "無",
+            休憩時間有無: record.breakTime ? "有" : "無"
+          };
+        });
+        console.table(entryStatusTable);
+
+        // 不一致がある場合は警告を出力
+        const mismatches = entryStatusTable.filter(item => item.判定一致 === "不一致");
+        if (mismatches.length > 0) {
+          console.warn(`⚠️ 入力判定ロジックに不一致が${mismatches.length}件あります:`);
+          console.table(mismatches);
+        } else {
+          console.log("✅ 全ての日付で入力判定ロジックが一致しています");
+        }
+
+        if (entered) {
+          const data = getKintaiDataByDate(deferredDate);
+
+          if (data) {
+            // 出勤時間が入力されている場合のみ保存済みとして扱う
+            const hasStartTime = data.startTime && data.startTime.trim() !== "";
+            
+            // 状態を一括で更新してレンダリング回数を最小化
+            const breakTimeAsString = formatBreakTime(data.breakTime);
+            
+            // React 18のバッチング機能を活用して状態更新を一括処理
+            startTransition(() => {
+              setStartTime(data.startTime !== undefined ? data.startTime : initialState.startTime);
+              setBreakTime(breakTimeAsString);
+              setEndTime(data.endTime !== undefined ? data.endTime : initialState.endTime);
+              setLocation(data.location !== undefined ? data.location : initialState.location);
+              setWorkingTime(data.workingTime || "");
+              dispatch({ type: EditActionType.CHECK_SAVED, payload: hasStartTime });
+              setIsDataLoading(false);
+            });
+          } else {
+            startTransition(() => {
+              setIsDataLoading(false);
+            });
+          }
+        } else {
+          startTransition(() => {
+            setIsDataLoading(false);
+          });
+        }
+      } catch (error) {
+        startTransition(() => {
+          setErrors({ general: "データの読み込みに失敗しました。" });
+          setIsDataLoading(false);
+        });
       }
 
-      const isOldDate = isDateTooOld(formState.date);
+      const isOldDate = isDateTooOld(deferredDate);
       setTooOldDateWarning(isOldDate);
     };
 
-    if (formState.date) {
+    if (deferredDate) {
       loadDateInfo();
     }
-  }, [formState.date]);
+  }, [deferredDate, monthlyData, currentYear, currentMonth, compareLogics, getKintaiDataByDate, isDateEntered, isDateEnteredNew]);
+
+  // スライドアニメーション用の状態
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationDirection, setAnimationDirection] = useState<'left' | 'right'>('right');
+  const [previousDate, setPreviousDate] = useState(formState.date);
 
   // 入力値変更ハンドラー
   const handleDateChange = (date: string) => {
-    dispatch({ type: EditActionType.DATE_CHANGE, payload: date });
+    // 日付の変更方向を判定
+    const currentDateObj = new Date(formState.date);
+    const newDateObj = new Date(date);
+    const direction = newDateObj > currentDateObj ? 'right' : 'left';
+    
+    setAnimationDirection(direction);
+    setPreviousDate(formState.date);
+    setIsAnimating(true);
+    
+    // アニメーション開始後に日付を更新
+    setTimeout(() => {
+      dispatch({ type: EditActionType.DATE_CHANGE, payload: date });
+      
+      // アニメーション終了
+      setTimeout(() => {
+        setIsAnimating(false);
+      }, 150);
+    }, 75);
   };
 
   const handleStartTimeChange = (time: string) => {
@@ -444,22 +539,44 @@ const KintaiForm: React.FC = () => {
     if (isVeryOldDate()) {
       return "編集不可（3日以上前）";
     }
-    return "長押しで編集";
+    return "入力済み 長押しで編集";
   };
 
   return (
     <div className="kintai-form">
-      {/* 日付選択 */}
-      <MobileDatePicker
-        value={formState.date}
-        onChange={handleDateChange}
-        selectableDates={selectableDates}
-      />
+      {/* 日付選択 - ヘッダー部分（固定） */}
+      <div className="kintai-form-header">
+        <MobileDatePicker
+          value={formState.date}
+          onChange={handleDateChange}
+          selectableDates={selectableDates}
+        />
+      </div>
 
-      {/* 古い日付の警告 */}
-      {tooOldDateWarning && (
-        <div className="warning-message">
-          ⚠️ 3日以上前の日付は編集できません
+      {/* コンテンツ部分（スライドアニメーション対象） */}
+      <div className={`kintai-form-content ${
+        isAnimating ? `animating slide-out-${animationDirection}` : ''
+      }`}>
+
+        {/* データ読み込み中の表示 */}
+        {isDataLoading && (
+          <div className="loading-message" style={{ 
+            padding: '8px 16px', 
+            backgroundColor: '#f0f8ff', 
+            border: '1px solid #e0e0e0', 
+            borderRadius: '4px', 
+            margin: '8px 0',
+            fontSize: '14px',
+            color: '#666'
+          }}>
+            📅 データを読み込み中...
+          </div>
+        )}
+
+        {/* 古い日付の警告 */}
+        {tooOldDateWarning && (
+          <div className="warning-message">
+            ⚠️ 3日以上前の日付は編集できません
         </div>
       )}
 
@@ -469,7 +586,7 @@ const KintaiForm: React.FC = () => {
         value={startTime}
         onChange={handleStartTimeChange}
         disabled={
-          (formState.isSaved && !formState.isEditing) || isVeryOldDate()
+          isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
         }
       />
       {errors.startTime && (
@@ -481,7 +598,7 @@ const KintaiForm: React.FC = () => {
         value={breakTime}
         onChange={handleBreakTimeChange}
         disabled={
-          (formState.isSaved && !formState.isEditing) || isVeryOldDate()
+          isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
         }
       />
       {errors.breakTime && (
@@ -494,7 +611,7 @@ const KintaiForm: React.FC = () => {
         value={endTime}
         onChange={handleEndTimeChange}
         disabled={
-          (formState.isSaved && !formState.isEditing) || isVeryOldDate()
+          isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
         }
       />
       {errors.endTime && <div className="error-message">{errors.endTime}</div>}
@@ -515,9 +632,9 @@ const KintaiForm: React.FC = () => {
           value={location}
           onChange={handleLocationChange}
           disabled={
-            (formState.isSaved && !formState.isEditing) || isVeryOldDate()
+            isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()
           }
-          className={`location-select ${!((formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""}`}
+          className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""}`}
         >
           <option value="">未選択</option>
           <option value="田んぼ">田んぼ</option>
@@ -577,6 +694,7 @@ const KintaiForm: React.FC = () => {
             保存する
           </button>
         )}
+      </div>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@
  */
 
 import { KintaiData, KintaiRecord } from "../types";
-import { formatBreakTimeFromMinutes } from "./dateUtils";
+
 
 // Vite環境変数から開発モードかどうかを判定
 const isDevelopment = import.meta.env.DEV;
@@ -545,17 +545,8 @@ export async function getKintaiDataByDate(
       const formattedStartTime = extractHHMM(record.startTime);
       const formattedEndTime = extractHHMM(record.endTime);
 
-      // breakTimeが文字列の場合は分数に変換してから再度文字列に変換
-      let breakTime: string;
-      if (typeof record.breakTime === "string") {
-        // 既にHH:mm形式の場合はそのまま使用
-        breakTime = record.breakTime;
-      } else {
-        // 数値の場合は分数からHH:mm形式に変換
-        const breakTimeMinutes =
-          record.breakTime !== undefined ? record.breakTime : 0;
-        breakTime = formatBreakTimeFromMinutes(breakTimeMinutes);
-      }
+      // 休憩時間は他の時間フィールドと同じく文字列として処理
+      const breakTime = record.breakTime || "00:00";
 
       return {
         date: record.date,
@@ -587,17 +578,8 @@ export function getKintaiDataFromMonthlyData(
       const formattedStartTime = extractHHMM(record.startTime);
       const formattedEndTime = extractHHMM(record.endTime);
 
-      // breakTimeが文字列の場合は分数に変換してから再度文字列に変換
-      let breakTime: string;
-      if (typeof record.breakTime === "string") {
-        // 既にHH:mm形式の場合はそのまま使用
-        breakTime = record.breakTime;
-      } else {
-        // 数値の場合は分数からHH:mm形式に変換
-        const breakTimeMinutes =
-          record.breakTime !== undefined ? record.breakTime : 0;
-        breakTime = formatBreakTimeFromMinutes(breakTimeMinutes);
-      }
+      // 休憩時間は他の時間フィールドと同じく文字列として処理
+      const breakTime = record.breakTime || "00:00";
 
       return {
         date: record.date,

@@ -9,7 +9,7 @@
  * @typedef {Object} KintaiPayload
  * @property {string} date - 勤怠日付（YYYY-MM-DD、YYYY/MM/DD、または日本語形式）
  * @property {string} startTime - 出勤時間（HH:mm形式）
- * @property {string|number} breakTime - 休憩時間（HH:mm形式または分数）
+ * @property {string} breakTime - 休憩時間（HH:mm形式）
  * @property {string} endTime - 退勤時間（HH:mm形式）
  * @property {string} spreadsheetId - Google SpreadsheetのID
  * @property {string} userId - ユーザーID
@@ -178,22 +178,13 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       /** @type {number} */
       const endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
       
-      // 休憩時間を分で計算（HH:mm形式かminutes形式かを判断）
+      // 休憩時間を分で計算（HH:mm形式から）
       /** @type {number} */
       let breakMinutes = 0;
-      if (typeof breakTime === 'string' && breakTime.includes(':')) {
-        // "1:30" のような時:分形式
+      if (breakTime && breakTime.includes(':')) {
         /** @type {string[]} */
         const breakParts = breakTime.split(':');
         breakMinutes = parseInt(breakParts[0], 10) * 60 + parseInt(breakParts[1], 10);
-      } else if (typeof breakTime === 'number') {
-        // 数値ならそのまま分
-        breakMinutes = breakTime;
-      } else if (typeof breakTime === 'string' && breakTime.match(/^\d+$/)) {
-        // "90" のような数字文字列も分として扱う
-        breakMinutes = parseInt(breakTime, 10);
-      } else {
-        breakMinutes = 0;
       }
       
       // 総勤務時間（分）= 終了時間 - 開始時間 - 休憩時間
@@ -796,14 +787,19 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
            formattedEndTime = Utilities.formatDate(dateFromSerial, Session.getScriptTimeZone(), "HH:mm");
         }
 
-        // 休憩時間の処理
-        let finalBreakTime;
+        // 休憩時間の処理（文字列として統一）
+        let finalBreakTime = "00:00"; // デフォルト値
         if (breakTimeValue instanceof Date) {
+          // Date型の場合は時:分形式の文字列に変換
           const hours = breakTimeValue.getHours();
           const minutes = breakTimeValue.getMinutes();
-          finalBreakTime = `${hours}:${minutes.toString().padStart(2, '0')}`;
-        } else {
-          finalBreakTime = breakTimeValue || '';
+          finalBreakTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        } else if (breakTimeValue && typeof breakTimeValue === 'string') {
+          // 文字列の場合はHH:mm形式に正規化
+          if (breakTimeValue.includes(':')) {
+            const [hours, minutes] = breakTimeValue.split(':');
+            finalBreakTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+          }
         }
         
         // 勤務時間の処理
@@ -889,7 +885,7 @@ Kintai.handleGetHistory = function(payload, token, debug, diagInfo = {}) {
  * @typedef {Object} KintaiPayload
  * @property {string} date - 勤怠日付（YYYY-MM-DD、YYYY/MM/DD、または日本語形式）
  * @property {string} startTime - 出勤時間（HH:mm形式）
- * @property {string|number} breakTime - 休憩時間（HH:mm形式または分数）
+ * @property {string} breakTime - 休憩時間（HH:mm形式）
  * @property {string} endTime - 退勤時間（HH:mm形式）
  * @property {string} spreadsheetId - Google SpreadsheetのID
  * @property {string} userId - ユーザーID
