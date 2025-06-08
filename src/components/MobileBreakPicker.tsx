@@ -11,11 +11,12 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
   onChange,
   disabled = false,
 }) => {
-  // 0:00から3:00までの15分間隔の時間配列を生成
+  // 0:15から3:00までの15分間隔の時間配列を生成（0:00は別途追加済み）
   const generateTimeOptions = () => {
     const times = [];
-    for (let hours = 0; hours <= 3; hours++) {
+    for (let hours = 0; hours <= 3; hours += 1) {
       for (let minutes = 0; minutes < 60; minutes += 15) {
+        if (hours === 0 && minutes === 0) continue; // 0:00はスキップ（別途追加済み）
         if (hours === 3 && minutes > 0) break; // 3:00で終了
         const timeString = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
         times.push(timeString);
@@ -31,38 +32,29 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
     onChange(timeString);
   };
 
-  // 表示用の休憩時間文字列を生成
-  const formatBreakTime = (timeString: string | undefined | null): string => {
-    // undefinedやnullの場合は「未入力」を返す
-    if (!timeString || timeString === "") {
-      return "未入力";
-    }
-
-    // 既にHH:mm形式の場合はそのまま返す
-    return timeString;
-  };
-
   return (
     <div className="form-group break-picker-group">
-      <label>休憩時間</label>
-
-      {disabled ? (
-        <div className="time-display">{formatBreakTime(value)}</div>
-      ) : (
+      <label htmlFor="mobileBreakPicker">
+        休憩時間
         <select
-          value={value || ""}
+          id="mobileBreakPicker"
+          value={
+            value === undefined || value === null || value === "" ? "" : value
+          }
           onChange={handleSelectChange}
-          className="custom-datepicker-input time-input-enabled"
+          className={`custom-datepicker-input ${disabled ? "time-input-disabled" : "time-input-enabled"}`}
           disabled={disabled}
         >
           <option value="">未入力</option>
+          <option value="0:00">0:00</option>
+          <option value="00:00">00:00</option>
           {timeOptions.map((time) => (
             <option key={time} value={time}>
               {time}
             </option>
           ))}
         </select>
-      )}
+      </label>
     </div>
   );
 };

@@ -3,15 +3,9 @@
  * 2025-05-05T15:30+09:00
  * 変更概要: 新規追加 - 共通ヘッダーコンポーネント
  */
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import {
-  getUserName,
-  getVersionInfo,
-  getClientVersion,
-  checkVersionCompatibility,
-  type VersionInfo,
-} from "../utils/apiService";
+import { getUserName } from "../utils/apiService";
 
 interface HeaderProps {
   onLogout: () => void;
@@ -20,33 +14,44 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onLogout }) => {
   const location = useLocation();
   const userName = getUserName();
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  // const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [versionCompatibility, setVersionCompatibility] = useState<{
-    compatible: boolean;
-    message?: string;
-  }>({ compatible: true });
+  // const [versionCompatibility, setVersionCompatibility] = useState<{
+  //   compatible: boolean;
+  //   message?: string;
+  // }>({ compatible: true });
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
     null,
   );
 
-  useEffect(() => {
-    // バージョン情報を取得
-    const fetchVersionInfo = async () => {
-      try {
-        const info = await getVersionInfo();
-        setVersionInfo(info);
+  // useEffect(() => {
+  //   // バージョン情報を取得
+  //   const fetchVersionInfo = async () => {
+  //     console.log("=== Header: バージョン情報取得開始 ===");
+  //     try {
+  //       console.log("getVersionInfo() を呼び出し中...");
+  //       const info = await getVersionInfo();
+  //       console.log("取得したバージョン情報:", info);
+  //       setVersionInfo(info);
 
-        // バージョン互換性をチェック
-        const compatibility = checkVersionCompatibility();
-        setVersionCompatibility(compatibility);
-      } catch (error) {
-        console.error("バージョン情報の取得に失敗:", error);
-      }
-    };
+  //       // バージョン互換性をチェック
+  //       console.log("バージョン互換性チェック中...");
+  //       const compatibility = checkVersionCompatibility();
+  //       console.log("互換性チェック結果:", compatibility);
+  //       setVersionCompatibility(compatibility);
 
-    fetchVersionInfo();
-  }, []);
+  //       console.log("=== Header: バージョン情報取得完了 ===");
+  //     } catch (error) {
+  //       console.error("=== Header: バージョン情報の取得に失敗 ===", error);
+  //       console.error("エラーの詳細:", {
+  //         message: (error as Error).message,
+  //         stack: (error as Error).stack,
+  //       });
+  //     }
+  //   };
+
+  //   fetchVersionInfo();
+  // }, []);
 
   // 長押し開始
   const handleLongPressStart = () => {
@@ -67,9 +72,9 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
   return (
     <div className="app-header">
       {/* バージョン互換性警告 */}
-      {!versionCompatibility.compatible && (
+      {/* {!versionCompatibility.compatible && (
         <div className="version-warning">⚠️ {versionCompatibility.message}</div>
-      )}
+      )} */}
 
       {/* 1行目：ユーザー名、タイトル、バージョン、ログアウト */}
       <div className="top-header">
@@ -129,6 +134,11 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
             <div className="modal-body">
               <div className="version-info">
                 <div className="version-item">
+                  <strong>
+                    バージョン情報機能は一時的に無効化されています
+                  </strong>
+                </div>
+                {/* <div className="version-item">
                   <strong>アプリバージョン:</strong> {getClientVersion()}
                 </div>
                 <div className="version-item">
@@ -148,16 +158,14 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
                   <strong>互換性:</strong>{" "}
                   <span
                     style={{
-                      color: versionCompatibility.compatible
-                        ? "green"
-                        : "red",
+                      color: versionCompatibility.compatible ? "green" : "red",
                     }}
                   >
                     {versionCompatibility.compatible
                       ? "✓ 互換性あり"
                       : "✗ 互換性なし"}
                   </span>
-                </div>
+                </div> */}
               </div>
             </div>
           </div>

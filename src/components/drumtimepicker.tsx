@@ -69,7 +69,7 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
     // Set new timeout for snap behavior
     scrollTimeoutRef.current = setTimeout(() => {
       if (containerRef.current) {
-        const scrollTop = containerRef.current.scrollTop;
+        const { scrollTop } = containerRef.current;
         // Use Math.floor and add 0.5 * itemHeight for better centering
         const index = Math.floor((scrollTop + itemHeight * 0.5) / itemHeight);
         const clampedIndex = Math.max(0, Math.min(index, options.length - 1));
@@ -89,13 +89,14 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
   }, [disabled, itemHeight, options, value, onChange, scrollToIndex]);
 
   // Clean up timeout on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
-    };
-  }, []);
+    },
+    [],
+  );
 
   const handleItemClick = (option: string, index: number) => {
     if (disabled) return;
@@ -105,13 +106,13 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
 
   return (
     <div className="drum-picker-item">
-      <div className="drum-picker-highlight"></div>
+      <div className="drum-picker-highlight" />
       <div
         ref={containerRef}
         className={`drum-picker-container ${disabled ? "disabled" : ""}`}
         onScroll={handleScroll}
       >
-        <div className="drum-picker-padding"></div>
+        <div className="drum-picker-padding" />
         {options.map((option, index) => {
           const isSelected = option === value;
           return (
@@ -124,7 +125,7 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
             </div>
           );
         })}
-        <div className="drum-picker-padding"></div>
+        <div className="drum-picker-padding" />
       </div>
     </div>
   );

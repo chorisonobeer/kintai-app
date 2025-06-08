@@ -15,7 +15,7 @@ const MobileTimePicker: React.FC<MobileTimePickerProps> = ({
   // 7:00から20:00までの15分間隔の時間配列を生成
   const generateTimeOptions = () => {
     const times = [];
-    for (let hours = 7; hours <= 20; hours++) {
+    for (let hours = 7; hours <= 20; hours += 1) {
       for (let minutes = 0; minutes < 60; minutes += 15) {
         const timeString = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
         times.push(timeString);
@@ -31,35 +31,24 @@ const MobileTimePicker: React.FC<MobileTimePickerProps> = ({
     onChange(timeString);
   };
 
-  // 表示用の時間文字列を生成
-  const formatTime = (timeString: string | undefined | null): string => {
-    if (!timeString || timeString === "") {
-      return "未入力";
-    }
-    return timeString;
-  };
-
   return (
     <div className="form-group time-picker-group">
-      <label>{label}</label>
+      <label htmlFor={`time-picker-${label}`}>{label}</label>
 
-      {disabled ? (
-        <div className="time-display">{formatTime(value)}</div>
-      ) : (
-        <select
-          value={value || ""}
-          onChange={handleSelectChange}
-          className="custom-datepicker-input time-input-enabled"
-          disabled={disabled}
-        >
-          <option value="">未入力</option>
-          {timeOptions.map((time) => (
-            <option key={time} value={time}>
-              {time}
-            </option>
-          ))}
-        </select>
-      )}
+      <select
+        id={`time-picker-${label}`}
+        value={value || ""}
+        onChange={handleSelectChange}
+        className={`custom-datepicker-input ${disabled ? "time-input-disabled" : "time-input-enabled"}`}
+        disabled={disabled}
+      >
+        <option value="">未入力</option>
+        {timeOptions.map((time) => (
+          <option key={time} value={time}>
+            {time}
+          </option>
+        ))}
+      </select>
     </div>
   );
 };

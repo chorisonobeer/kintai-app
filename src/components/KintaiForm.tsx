@@ -20,12 +20,8 @@ import {
   isTimeBeforeOrEqual,
   getSelectableDates,
 } from "../utils/dateUtils";
-import {
-  saveKintaiToServer,
-  isAuthenticated,
-  isEnteredDate,
-  getKintaiDataByDate,
-} from "../utils/apiService";
+import { saveKintaiToServer, isAuthenticated } from "../utils/apiService";
+import { useKintai } from "../contexts/KintaiContext";
 
 // 初期状態
 const initialState: KintaiFormState = {
@@ -162,6 +158,7 @@ const calculateWorkingTime = (
 
 const KintaiForm: React.FC = () => {
   const navigate = useNavigate();
+  const { refreshData, isDateEntered, getKintaiDataByDate } = useKintai();
 
   // ユーザー認証チェック
   useEffect(() => {
@@ -180,6 +177,58 @@ const KintaiForm: React.FC = () => {
   const [location, setLocation] = useState(initialState.location);
   const [workingTime, setWorkingTime] = useState(""); // 勤務時間の状態を追加
   const [errors, setErrors] = useState<ValidationErrors>({});
+
+  /**
+   * 休憩時間の表示フォーマット
+   * 数値（分）、文字列（HH:mm）、undefined/null に対応
+   */
+  const formatBreakTime = (
+    breakTime: number | string | undefined | null,
+  ): string => {
+    // undefinedやnullの場合は空文字を返す（未入力状態）
+    if (breakTime === undefined || breakTime === null) return "";
+
+    // 0の場合は「00:00」を表示
+    if (
+      breakTime === 0 ||
+      breakTime === "0" ||
+      breakTime === "0:00" ||
+      breakTime === "00:00"
+    )
+      return "00:00";
+
+    // 既に文字列でHH:mm形式の場合は00:00形式に統一
+    if (typeof breakTime === "string") {
+      const timeMatch = breakTime.match(/^(\d{1,2}):(\d{2})$/);
+      if (timeMatch) {
+        const hours = parseInt(timeMatch[1], 10);
+        const minutes = parseInt(timeMatch[2], 10);
+        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+      }
+
+      // 文字列だが数値として解釈できる場合は分数として処理
+      const numericValue = parseInt(breakTime, 10);
+      if (!Number.isNaN(numericValue)) {
+        const hours = Math.floor(numericValue / 60);
+        const mins = numericValue % 60;
+        return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+      }
+
+      // その他の文字列形式は空文字を返す
+      return "";
+    }
+
+    // 数値の場合は分数から00:00形式に変換
+    if (typeof breakTime === "number") {
+      if (breakTime < 0) return "";
+      const hours = Math.floor(breakTime / 60);
+      const mins = breakTime % 60;
+      return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+    }
+
+    // その他の型の場合は空文字を返す
+    return "";
+  };
   const [isSubmitting, setIsSubmitting] = useState(false); // ← これを有効化
   const [] = useState(false); // handleSave で使用 (isSubmittingと役割が近い場合は統一を検討)
   const [tooOldDateWarning, setTooOldDateWarning] = useState(false);
@@ -204,14 +253,12 @@ const KintaiForm: React.FC = () => {
     const loadDateInfo = async () => {
       setErrors({}); // 日付変更時にエラーをリセット
       try {
-        const entered = await isEnteredDate(new Date(formState.date));
+        const entered = isDateEntered(new Date(formState.date));
 
         if (entered) {
-          const data = await getKintaiDataByDate(formState.date);
+          const data = getKintaiDataByDate(formState.date);
 
           if (data) {
-            // データの詳細をログ出力
-
             // 出勤時間が入力されている場合のみ保存済みとして扱う
             // 空文字や未定義は未入力として扱う
             const hasStartTime = data.startTime && data.startTime.trim() !== "";
@@ -228,21 +275,8 @@ const KintaiForm: React.FC = () => {
             );
 
             // apiService から "HH:mm" 形式で渡ってくることを期待
-            // breakTime の処理 - undefinedの場合は空文字を使用（空表示のため）
-            let breakTimeAsString = "";
-            if (
-              data.breakTime !== undefined &&
-              typeof data.breakTime === "string"
-            ) {
-              breakTimeAsString = data.breakTime;
-              // 休憩時間を文字列として設定
-            } else if (data.breakTime !== undefined) {
-              // 万が一文字列でない場合 (apiServiceの変換が失敗した場合など)
-              // 休憩時間が文字列でない場合は空文字に設定
-            } else {
-              // 休憩時間がundefinedのため空文字に設定
-            }
-            // data.breakTime が undefined の場合は空文字を使用（空表示）
+            // breakTime の処理 - 月次ビューと同じロジックを使用
+            const breakTimeAsString = formatBreakTime(data.breakTime);
             setBreakTime(breakTimeAsString);
 
             // apiService から "HH:mm" 形式で渡ってくることを期待
@@ -367,6 +401,8 @@ const KintaiForm: React.FC = () => {
 
         if (result.success) {
           dispatch({ type: EditActionType.SAVE_COMPLETE });
+          // データ保存後にKintaiContextの月次データを更新
+          await refreshData();
         } else {
           setErrors({ general: result.error || "エラーが発生しました" });
         }
@@ -393,9 +429,7 @@ const KintaiForm: React.FC = () => {
   };
 
   // 古い日付かどうかの判定
-  const isVeryOldDate = (): boolean => {
-    return isDateTooOld(formState.date);
-  };
+  const isVeryOldDate = (): boolean => isDateTooOld(formState.date);
 
   // ボタンのクラス名を取得
   const getButtonClassName = (): string => {

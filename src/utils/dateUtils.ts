@@ -5,14 +5,6 @@
  */
 
 /**
- * 現在の日付をYYYY-MM-DD形式で返す
- */
-export const getCurrentDate = (): string => {
-  const today = new Date();
-  return formatDate(today);
-};
-
-/**
  * 日付をYYYY-MM-DD形式にフォーマットする
  */
 export const formatDate = (date: Date): string => {
@@ -20,6 +12,14 @@ export const formatDate = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+/**
+ * 現在の日付をYYYY-MM-DD形式で返す
+ */
+export const getCurrentDate = (): string => {
+  const today = new Date();
+  return formatDate(today);
 };
 
 /**
@@ -62,7 +62,7 @@ export const parseTimeStringToMinutes = (timeString: string): number => {
   const hours = parseInt(parts[0], 10);
   const minutes = parseInt(parts[1], 10);
 
-  if (isNaN(hours) || isNaN(minutes)) return 0;
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
 
   return hours * 60 + minutes;
 };
@@ -81,7 +81,7 @@ export const formatBreakTimeFromMinutes = (
 
   const totalMinutes =
     typeof minutes === "string" ? parseInt(minutes, 10) : minutes;
-  if (isNaN(totalMinutes) || totalMinutes < 0) return "";
+  if (Number.isNaN(totalMinutes) || totalMinutes < 0) return "";
 
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
@@ -141,7 +141,7 @@ export const getSelectableDates = (): { value: string; label: string }[] => {
   const today = new Date();
   const dates = [];
 
-  for (let i = 0; i <= 2; i++) {
+  for (let i = 0; i <= 2; i += 1) {
     const date = new Date();
     date.setDate(today.getDate() - i);
     const dateString = formatDate(date);
@@ -160,9 +160,8 @@ export const getSelectableDates = (): { value: string; label: string }[] => {
 /**
  * 時間が正しいフォーマット（HH:MM）かチェックする
  */
-export const isValidTimeFormat = (time: string): boolean => {
-  return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
-};
+export const isValidTimeFormat = (time: string): boolean =>
+  /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
 
 /**
  * 2つの時間を比較する（time1 <= time2 ならtrue）
@@ -177,7 +176,8 @@ export const isTimeBeforeOrEqual = (time1: string, time2: string): boolean => {
 
   if (hours1 < hours2) {
     return true;
-  } else if (hours1 === hours2) {
+  }
+  if (hours1 === hours2) {
     return minutes1 <= minutes2;
   }
 

@@ -45,7 +45,7 @@ const MonthlyView: React.FC = () => {
       const formattedDate = normalizeDateForDisplay(dateStr);
       const date = new Date(formattedDate);
 
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         return "";
       }
       const days = ["日", "月", "火", "水", "木", "金", "土"];
@@ -62,7 +62,7 @@ const MonthlyView: React.FC = () => {
       const formattedDate = normalizeDateForDisplay(dateStr);
       const date = new Date(formattedDate);
 
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         return "";
       }
       const day = date.getDay();
@@ -81,7 +81,7 @@ const MonthlyView: React.FC = () => {
       const formattedDate = normalizeDateForDisplay(dateStr);
       const date = new Date(formattedDate);
 
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         // 無効な日付の場合、正規化された文字列から日を抽出
         const normalized = normalizeDateForDisplay(dateStr); // 正規化を試みる
         const match = normalized.match(/^\d{4}-\d{2}-(\d{2})$/);
@@ -206,7 +206,7 @@ const MonthlyView: React.FC = () => {
 
       // 数値（分単位）の場合 - 文字列として渡される可能性も考慮
       const minutesOnly = parseInt(workTimeStr, 10);
-      if (!isNaN(minutesOnly) && minutesOnly >= 0) {
+      if (!Number.isNaN(minutesOnly) && minutesOnly >= 0) {
         const hours = Math.floor(minutesOnly / 60);
         const minutes = minutesOnly % 60;
         return `${hours}:${minutes.toString().padStart(2, "0")}`;
@@ -243,7 +243,7 @@ const MonthlyView: React.FC = () => {
 
       // 文字列だが数値として解釈できる場合は分数として処理
       const numericValue = parseInt(breakTime, 10);
-      if (!isNaN(numericValue)) {
+      if (!Number.isNaN(numericValue)) {
         const hours = Math.floor(numericValue / 60);
         const mins = numericValue % 60;
         return `${hours}:${mins.toString().padStart(2, "0")}`;
@@ -278,7 +278,7 @@ const MonthlyView: React.FC = () => {
       if (timeMatch && timeMatch.length === 3) {
         const hours = parseInt(timeMatch[1], 10);
         const minutes = parseInt(timeMatch[2], 10);
-        if (!isNaN(hours) && !isNaN(minutes)) {
+        if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
           return hours * 60 + minutes;
         }
       }
@@ -289,7 +289,7 @@ const MonthlyView: React.FC = () => {
         if (isoTimeMatch && isoTimeMatch.length === 4) {
           const hours = parseInt(isoTimeMatch[1], 10);
           const minutes = parseInt(isoTimeMatch[2], 10);
-          if (!isNaN(hours) && !isNaN(minutes)) {
+          if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
             return hours * 60 + minutes;
           }
         }
@@ -300,11 +300,11 @@ const MonthlyView: React.FC = () => {
       if (hourMatch) {
         const hours = parseInt(hourMatch[1], 10);
         let totalMinutes = 0;
-        if (!isNaN(hours)) {
+        if (!Number.isNaN(hours)) {
           totalMinutes = hours * 60;
           if (hourMatch[2]) {
             const decimalPart = parseFloat(`0.${hourMatch[2]}`);
-            if (!isNaN(decimalPart)) {
+            if (!Number.isNaN(decimalPart)) {
               totalMinutes += Math.round(decimalPart * 60);
             }
           }
@@ -314,7 +314,7 @@ const MonthlyView: React.FC = () => {
 
       // 数値（分単位）の場合 - 文字列として渡される可能性も考慮
       const minutesOnly = parseInt(workTimeStr, 10);
-      if (!isNaN(minutesOnly) && minutesOnly >= 0) {
+      if (!Number.isNaN(minutesOnly) && minutesOnly >= 0) {
         return minutesOnly;
       }
 
@@ -457,7 +457,7 @@ const MonthlyView: React.FC = () => {
       {/* ローディングオーバーレイ */}
       {(isDataLoading || isRefreshing) && (
         <div className="loading-overlay">
-          <div className="loading-spinner"></div>
+          <div className="loading-spinner" />
           <div className="loading-text">データを読み込み中...</div>
         </div>
       )}

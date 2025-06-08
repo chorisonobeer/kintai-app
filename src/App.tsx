@@ -13,11 +13,8 @@ import { isAuthenticated, logout } from "./utils/apiService";
 import { KintaiProvider } from "./contexts/KintaiContext";
 
 // 認証保護ルート用のラッパーコンポーネント
-const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({
-  element,
-}) => {
-  return isAuthenticated() ? <>{element}</> : <Navigate to="/login" replace />;
-};
+const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) =>
+  isAuthenticated() ? <>{element}</> : <Navigate to="/login" replace />;
 
 const App: React.FC = () => {
   // アプリ起動時にlocalStorageの整合性をチェック
@@ -25,7 +22,7 @@ const App: React.FC = () => {
     console.log("=== アプリ起動時チェック ===");
     console.log("現在のURL:", window.location.href);
     console.log("認証状態:", isAuthenticated());
-    
+
     // 認証が必要なページで認証情報が不完全な場合は強制ログアウト
     if (window.location.pathname !== "/login" && !isAuthenticated()) {
       console.log("認証情報が不完全です。ログアウト処理を実行します。");

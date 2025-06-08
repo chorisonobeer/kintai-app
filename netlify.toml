@@ -1,22 +1,23 @@
-# netlify.toml (2025‑04‑21)
+# netlify.toml
 [build]
   publish   = "dist"
   functions = "netlify/functions"
 
 [dev]
-  command    = "npm run dev"
-  framework  = "vite"
-  targetPort = 5173
-  port       = 8888
+  command    = "npm run dev"   # ← ご自身の Vite 起動コマンド
+  targetPort = 5173            # ← Vite が listen するポート
+  port       = 8888            # ← Netlify Dev がブラウザに見せるポート
+  framework  = "#custom"       # ★ ここを変更！
   autoLaunch = true
+    edgeFunctionsPort = 0
 
-# キャッシュ制御ヘッダー
+# 以下はそのまま ─────────────
 [[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
-    Pragma = "no-cache"
-    Expires = "0"
+    Pragma        = "no-cache"
+    Expires       = "0"
 
 [[headers]]
   for = "/assets/*"
@@ -26,11 +27,12 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
+    X-Frame-Options      = "DENY"
     X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
 
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
+

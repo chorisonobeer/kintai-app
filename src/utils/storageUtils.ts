@@ -5,9 +5,7 @@ const STORAGE_KEY_PREFIX = "kintai_data_";
 /**
  * 日付に基づいたストレージキーを生成
  */
-const getStorageKey = (date: string): string => {
-  return `${STORAGE_KEY_PREFIX}${date}`;
-};
+const getStorageKey = (date: string): string => `${STORAGE_KEY_PREFIX}${date}`;
 
 /**
  * 勤怠データを保存
@@ -37,9 +35,8 @@ export const getKintaiData = (date: string): KintaiData | null => {
 /**
  * 特定の日付のデータが保存済みかをチェック
  */
-export const isDateSaved = (date: string): boolean => {
-  return getKintaiData(date) !== null;
-};
+export const isDateSaved = (date: string): boolean =>
+  getKintaiData(date) !== null;
 
 /**
  * 保存済みの勤怠データを削除
