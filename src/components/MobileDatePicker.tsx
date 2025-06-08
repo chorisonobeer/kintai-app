@@ -16,12 +16,14 @@ interface MobileDatePickerProps {
   onChange: (date: string) => void;
   disabled?: boolean;
   selectableDates?: { value: string; label: string }[];
+  isEditing?: boolean; // 編集モード状態
 }
 
 const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
   value,
   onChange,
   disabled = false,
+  isEditing = false,
 }) => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -44,11 +46,13 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
     }
   };
 
-  // 表示用の日付フォーマット
+  // 表示用の日付フォーマット（曜日付き）
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
-    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+    const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+    const weekday = weekdays[date.getDay()];
+    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} (${weekday})`;
   };
 
   // 前の日に移動
@@ -75,15 +79,17 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
 
       <div className="month-control">
         <div className="month-selector">
-          <button
-            type="button"
-            className="month-nav-button"
-            onClick={handlePreviousDay}
-            disabled={disabled}
-            aria-label="前日"
-          >
-            ＜
-          </button>
+          {!isEditing && (
+            <button
+              type="button"
+              className="month-nav-button"
+              onClick={handlePreviousDay}
+              disabled={disabled}
+              aria-label="前日"
+            >
+              ＜
+            </button>
+          )}
 
           {disabled ? (
             <h2 className="date-display">{formatDisplayDate(value)}</h2>
@@ -91,7 +97,7 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
             <DatePicker
               selected={selectedDate}
               onChange={handleDateChange}
-              dateFormat="yyyy/MM/dd"
+              dateFormat="yyyy/MM/dd (eee)"
               locale="ja"
               className="custom-datepicker-input"
               popperPlacement="bottom-start"
@@ -99,15 +105,17 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
             />
           )}
 
-          <button
-            type="button"
-            className="month-nav-button"
-            onClick={handleNextDay}
-            disabled={disabled}
-            aria-label="翌日"
-          >
-            ＞
-          </button>
+          {!isEditing && (
+            <button
+              type="button"
+              className="month-nav-button"
+              onClick={handleNextDay}
+              disabled={disabled}
+              aria-label="翌日"
+            >
+              ＞
+            </button>
+          )}
         </div>
       </div>
     </div>

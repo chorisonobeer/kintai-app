@@ -1,0 +1,66 @@
+/**
+ * /src/styles/long-press.css
+ * 2025-05-16T10:00+09:00
+ * 変更概要: 新規追加 - 長押し時の視覚的フィードバック用スタイル
+ */
+
+/* 長押し中のボタンスタイル */
+.long-pressing {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+/* 長押しプログレスバーのアニメーション */
+.long-press-progress {
+  animation: shimmer 1s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+/* 長押し可能な要素のホバー効果 */
+.long-pressable:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: background-color 0.2s ease;
+}
+
+/* 長押し中の要素の影効果 */
+.long-pressing {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* モバイル対応: タッチ時のハイライト無効化 */
+.long-pressable {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* 長押し進行中のテキスト効果 */
+.long-pressing span {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 長押し完了時のフラッシュ効果 */
+@keyframes longPressComplete {
+  0% {
+    background-color: rgba(76, 175, 80, 1);
+  }
+  100% {
+    background-color: rgba(76, 175, 80, 0.8);
+  }
+}
+
+.long-press-complete {
+  animation: longPressComplete 0.3s ease;
+}

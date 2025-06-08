@@ -79,8 +79,8 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
       setMonthlyData(data);
       // データ取得完了
 
-      // 新しい入力判定ロジック用のキャッシュを初期化
-      await initializeEntryStatusCache();
+      // 新しい入力判定ロジック用のキャッシュを初期化（取得したデータを直接渡す）
+      await initializeEntryStatusCache(data);
     } catch (error) {
       // データ取得エラー
       setMonthlyData([]);
@@ -90,12 +90,15 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   // 新しい入力判定ロジック用キャッシュの初期化
-  const initializeEntryStatusCache = async () => {
+  const initializeEntryStatusCache = async (data?: KintaiRecord[]) => {
     try {
       const yearMonth = `${currentYear}-${currentMonth.toString().padStart(2, "0")}`;
 
+      // 引数で渡されたデータを使用、なければmonthlyDataを使用
+      const sourceData = data || monthlyData;
+
       // KintaiRecord[] を KintaiData[] に変換
-      const convertedData = monthlyData.map((record) => ({
+      const convertedData = sourceData.map((record) => ({
         date: record.date,
         startTime: record.startTime,
         breakTime: record.breakTime, // 元の値をそのまま渡す（空文字列やnullも保持）

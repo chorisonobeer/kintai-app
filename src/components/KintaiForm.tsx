@@ -9,6 +9,7 @@ import React, {
   useReducer,
   useTransition,
   useDeferredValue,
+  useRef,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileDatePicker from "./MobileDatePicker";
@@ -199,6 +200,9 @@ const KintaiForm: React.FC = () => {
 
   // ローディング状態を管理
   const [isDataLoading, setIsDataLoading] = useState(false);
+  
+  // 削除確認モーダルの状態
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   /**
    * 休憩時間の表示フォーマット
@@ -294,14 +298,7 @@ const KintaiForm: React.FC = () => {
         const comparison = compareLogics(new Date(deferredDate));
         const entered = comparison.legacy; // 現在は既存ロジックを使用
 
-        // 判定テーブル更新は非同期でバックグラウンド実行（UIをブロックしない）
-        setTimeout(async () => {
-          try {
-            await refreshData();
-          } catch (bgError) {
-            // バックグラウンド更新エラー
-          }
-        }, 0);
+        // 保存ボタン押下時のみデータ更新を行うため、ここでのrefreshDataは削除
 
         // 開発環境でのみ比較結果をログ出力
         if (process.env.NODE_ENV === "development" && !comparison.match) {
@@ -499,14 +496,75 @@ const KintaiForm: React.FC = () => {
     dispatch({ type: EditActionType.CANCEL_EDIT });
   };
 
+  // 削除確認モーダルを表示
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
+
+  // 削除確認モーダルをキャンセル
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+  };
+
+  // データ削除処理
+  const handleDeleteConfirm = () => {
+    // 全フィールドを空文字に設定
+    setStartTime("");
+    setBreakTime("");
+    setEndTime("");
+    setLocation("");
+    // モーダルを閉じる
+    setShowDeleteModal(false);
+    // 編集モードを終了
+    dispatch({ type: EditActionType.CANCEL_EDIT });
+  };
+
   // 長押し処理
+  const [longPressProgress, setLongPressProgress] = useState(0);
+  const [isLongPressing, setIsLongPressing] = useState(false);
+  const longPressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleLongPressStart = () => {
     dispatch({ type: EditActionType.TOUCH_START });
+    setIsLongPressing(true);
+    setLongPressProgress(0);
+    
+    // プログレスバーのアニメーション
+    const startTime = Date.now();
+    const duration = 1000; // 1秒
+    
+    const updateProgress = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min((elapsed / duration) * 100, 100);
+      setLongPressProgress(progress);
+      
+      if (progress < 100) {
+        longPressIntervalRef.current = setTimeout(updateProgress, 16); // 60fps
+      }
+    };
+    
+    updateProgress();
   };
 
   const handleLongPressEnd = () => {
     dispatch({ type: EditActionType.TOUCH_END });
+    setIsLongPressing(false);
+    setLongPressProgress(0);
+    
+    if (longPressIntervalRef.current) {
+      clearTimeout(longPressIntervalRef.current);
+      longPressIntervalRef.current = null;
+    }
   };
+
+  // コンポーネントのクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (longPressIntervalRef.current) {
+        clearTimeout(longPressIntervalRef.current);
+      }
+    };
+  }, []);
 
   // 古い日付かどうかの判定
   const isVeryOldDate = (): boolean => isDateTooOld(formState.date);
@@ -535,6 +593,7 @@ const KintaiForm: React.FC = () => {
           value={formState.date}
           onChange={handleDateChange}
           selectableDates={selectableDates}
+          isEditing={formState.isEditing}
         />
       </div>
 
@@ -663,26 +722,62 @@ const KintaiForm: React.FC = () => {
               >
                 保存する
               </button>
-              <button
-                className="btn"
-                onClick={handleCancelEdit}
-                style={{ marginTop: "8px", backgroundColor: "#9e9e9e" }}
-                disabled={isSubmitting}
-              >
-                キャンセル
-              </button>
+              <div className="button-row" style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <button
+                  className="btn"
+                  onClick={handleDeleteClick}
+                  style={{ flex: 1, backgroundColor: "#f44336", color: "white" }}
+                  disabled={isSubmitting}
+                >
+                  削除
+                </button>
+                <button
+                  className="btn"
+                  onClick={handleCancelEdit}
+                  style={{ flex: 1, backgroundColor: "#9e9e9e" }}
+                  disabled={isSubmitting}
+                >
+                  キャンセル
+                </button>
+              </div>
             </>
           ) : formState.isSaved ? (
             <button
-              className={getButtonClassName()}
+              className={`${getButtonClassName()} ${isLongPressing ? 'long-pressing' : ''}`}
               onTouchStart={isVeryOldDate() ? undefined : handleLongPressStart}
               onTouchEnd={isVeryOldDate() ? undefined : handleLongPressEnd}
               onMouseDown={isVeryOldDate() ? undefined : handleLongPressStart}
               onMouseUp={isVeryOldDate() ? undefined : handleLongPressEnd}
               onMouseLeave={isVeryOldDate() ? undefined : handleLongPressEnd}
               disabled={isSubmitting || isVeryOldDate()}
+              style={{
+                position: 'relative',
+                overflow: 'hidden',
+                backgroundColor: isLongPressing 
+                  ? `rgba(76, 175, 80, ${0.7 + (longPressProgress / 100) * 0.3})` 
+                  : undefined
+              }}
             >
-              {getSaveButtonText()}
+              {/* プログレスバー */}
+              {isLongPressing && (
+                <div
+                  className="long-press-progress"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    height: '100%',
+                    width: `${longPressProgress}%`,
+                    background: 'linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.5) 100%)',
+                    transition: 'none',
+                    pointerEvents: 'none',
+                    zIndex: 1
+                  }}
+                />
+              )}
+              <span style={{ position: 'relative', zIndex: 2 }}>
+                {getSaveButtonText()}
+              </span>
             </button>
           ) : (
             <button
@@ -699,6 +794,68 @@ const KintaiForm: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* 削除確認モーダル */}
+      {showDeleteModal && (
+        <div className="modal-overlay" style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000
+        }}>
+          <div className="modal-content" style={{
+            backgroundColor: "white",
+            padding: "24px",
+            borderRadius: "8px",
+            maxWidth: "400px",
+            width: "90%",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)"
+          }}>
+            <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: "600" }}>
+              データを削除しますか？
+            </h3>
+            <p style={{ margin: "0 0 24px 0", color: "#666", lineHeight: "1.5" }}>
+              出勤時間、休憩時間、退勤時間、勤務場所のデータが削除されます。
+            </p>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                className="btn"
+                onClick={handleDeleteCancel}
+                style={{
+                  backgroundColor: "#9e9e9e",
+                  color: "white",
+                  padding: "8px 16px",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer"
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                className="btn"
+                onClick={handleDeleteConfirm}
+                style={{
+                  backgroundColor: "#f44336",
+                  color: "white",
+                  padding: "8px 16px",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer"
+                }}
+              >
+                削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
