@@ -33,7 +33,7 @@ export const formatShortDate = (dateString: string): string => {
 };
 
 /**
- * 指定された日付が2日以上前かどうかをチェックする
+ * 指定された日付が20日以上前かどうかをチェックする
  */
 export const isDateTooOld = (dateString: string): boolean => {
   const selectedDate = new Date(dateString);
@@ -47,7 +47,7 @@ export const isDateTooOld = (dateString: string): boolean => {
   const timeDiff = today.getTime() - selectedDate.getTime();
   const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
 
-  return diffDays > 2;
+  return diffDays > 20;
 };
 
 /**
