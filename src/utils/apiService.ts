@@ -17,7 +17,7 @@ const isDevelopment = import.meta.env.DEV;
 /* ========= 定数 ========= */
 // 開発環境ではプロキシ経由でGAS APIを呼び出し、本番環境ではNetlify Functionsを使用
 const FUNC_URL = "/.netlify/functions/kintai-api"; // 本番環境でNetlify Functionsを経由する
-const DEV_PROXY_URL = "/api/gas"; // 開発環境でプロキシ経由でGASを呼び出す
+const DEV_PROXY_URL = import.meta.env.VITE_DEV_PROXY_PATH || "/api/gas"; // 開発環境でプロキシ経由でGASを呼び出す
 
 // デバッグ用ログ
 // API Service 初期化
@@ -25,14 +25,14 @@ const DEV_PROXY_URL = "/api/gas"; // 開発環境でプロキシ経由でGASを�
 const TOKEN_KEY = "kintai_token";
 const USER_ID_KEY = "kintai_user_id";
 const USER_NAME_KEY = "kintai_user_name";
-const SHEET_ID_KEY = "kintai_spreadsheet_id";
+// SHEET_ID_KEY定数は削除 - 現在開いているスプレッドシートを使用するため不要
 
 // 月間データをセッションストレージに保存するためのキー
 const MONTHLY_DATA_KEY = "kintai_monthly_data";
 const MONTHLY_DATA_TIMESTAMP_KEY = "kintai_monthly_data_timestamp";
 
 /* 開発時の可視化フラグ */
-const DEBUG_MODE = true;
+const DEBUG_MODE = () => localStorage.getItem("kintai_debug_mode") === "true";
 
 /* ========= 共通型 ========= */
 interface ApiOk<T = unknown> {
@@ -41,7 +41,6 @@ interface ApiOk<T = unknown> {
   token?: string;
   userId?: string;
   userName?: string;
-  spreadsheetId?: string;
   data?: T;
   debug?: unknown;
   version?: string;
@@ -134,7 +133,7 @@ async function callGAS<T = unknown>(
 
   const body: Record<string, unknown> = { action, payload };
   if (withToken) body.token = localStorage.getItem(TOKEN_KEY);
-  if (DEBUG_MODE) body.debug = true;
+  if (DEBUG_MODE()) body.debug = true;
 
   // リクエストの重複チェック用キー
   const requestKey = `${action}-${JSON.stringify(payload)}-${withToken}`;
@@ -154,8 +153,14 @@ async function callGAS<T = unknown>(
   // リクエストをキャッシュに追加
   const requestPromise = (async (): Promise<ApiOk<T>> => {
     try {
-      // 開発環境ではプロキシ経由、本番環境ではNetlify Functionsを使用
-      const apiUrl = isDevelopment ? DEV_PROXY_URL : FUNC_URL;
+      // VITE_MASTER_CONFIG_API_URLを直接使用
+      const apiUrl = import.meta.env.VITE_MASTER_CONFIG_API_URL;
+      if (!apiUrl) {
+        console.error(
+          "VITE_MASTER_CONFIG_API_URL is not defined. Please check your .env file or environment variables.",
+        );
+        throw new Error("API URL is not configured. Contact administrator.");
+      }
       // API呼び出し中
       const res = await fetchWithRetry(apiUrl, fetchOptions, 2, 8000);
 
@@ -163,7 +168,39 @@ async function callGAS<T = unknown>(
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
-      const json = (await res.json()) as ApiResp<T>;
+      // レスポンステキストを取得してJSONパース前にチェック
+      const responseText = await res.text();
+
+      // HTMLレスポンスの検出
+      if (
+        responseText.trim().startsWith("<!DOCTYPE") ||
+        responseText.trim().startsWith("<html")
+      ) {
+        console.error("HTMLレスポンスを受信:", {
+          url: apiUrl,
+          action,
+          responsePreview: responseText.substring(0, 200) + "...",
+        });
+        throw new Error(
+          `GASからHTMLレスポンスが返されました。GAS側の設定を確認してください。\nAction: ${action}\nURL: ${apiUrl}`,
+        );
+      }
+
+      let json: ApiResp<T>;
+      try {
+        json = JSON.parse(responseText) as ApiResp<T>;
+      } catch (parseError) {
+        console.error("JSONパースエラー:", {
+          url: apiUrl,
+          action,
+          responseText: responseText.substring(0, 500),
+          parseError,
+        });
+        throw new Error(
+          `GASからの応答をJSONとして解析できませんでした。\nAction: ${action}\nResponse: ${responseText.substring(0, 100)}...`,
+        );
+      }
+
       // API レスポンス受信
 
       // バージョン情報をローカルストレージに保存
@@ -187,6 +224,13 @@ async function callGAS<T = unknown>(
       return json as ApiOk<T>;
     } catch (error) {
       // API呼び出しエラー
+      console.error("callGAS エラー詳細:", {
+        action,
+        payload,
+        withToken,
+        apiUrl: isDevelopment ? DEV_PROXY_URL : FUNC_URL,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     } finally {
       // リクエストキャッシュから削除
@@ -213,7 +257,6 @@ export async function login(
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_ID_KEY);
     localStorage.removeItem(USER_NAME_KEY);
-    localStorage.removeItem(SHEET_ID_KEY);
 
     // セッションキャッシュもクリア
     sessionStorage.removeItem(MONTHLY_DATA_KEY);
@@ -230,7 +273,6 @@ export async function login(
     localStorage.setItem(TOKEN_KEY, r.token as string);
     localStorage.setItem(USER_ID_KEY, r.userId as string);
     localStorage.setItem(USER_NAME_KEY, r.userName as string);
-    localStorage.setItem(SHEET_ID_KEY, r.spreadsheetId as string);
 
     // デバッグ: 保存後の値を確認
     // localStorage保存完了
@@ -249,7 +291,6 @@ export async function logout(): Promise<void> {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_ID_KEY);
     localStorage.removeItem(USER_NAME_KEY);
-    localStorage.removeItem(SHEET_ID_KEY);
 
     // 月間データのキャッシュもクリア
     sessionStorage.removeItem(MONTHLY_DATA_KEY);
@@ -262,10 +303,9 @@ export async function saveKintaiToServer(
   data: KintaiData, // KintaiData型は { date: string; startTime: string; breakTime: string; endTime: string; location?: string; }
 ): Promise<{ success: boolean; error?: string }> {
   const token = localStorage.getItem(TOKEN_KEY);
-  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
 
-  if (!token || !spreadsheetId || !userId) {
+  if (!token || !userId) {
     return { success: false, error: "ログイン情報が不足しています" };
   }
 
@@ -280,7 +320,6 @@ export async function saveKintaiToServer(
         breakTime: data.breakTime, // string (HH:mm)
         endTime: data.endTime, // "HH:mm"
         location: data.location || "",
-        spreadsheetId,
         userId,
       },
       true,
@@ -300,16 +339,15 @@ export async function getKintaiHistory(
   month: number,
 ): Promise<KintaiRecord[]> {
   const token = localStorage.getItem(TOKEN_KEY);
-  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
 
-  if (!token || !spreadsheetId || !userId) {
+  if (!token || !userId) {
     throw new Error("認証情報が不足しています");
   }
 
   const r = await callGAS<KintaiRecord[]>(
     "getHistory",
-    { spreadsheetId, userId, year, month },
+    { userId, year, month },
     true,
   );
   return r.data as KintaiRecord[];
@@ -322,13 +360,12 @@ export async function getMonthlyData(
   forceRefresh = false,
 ): Promise<KintaiRecord[]> {
   const token = localStorage.getItem(TOKEN_KEY);
-  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
 
   // デバッグ: データ取得時の認証情報を確認
   // 月次データ取得開始
 
-  if (!token || !spreadsheetId || !userId) {
+  if (!token || !userId) {
     // 認証情報不足エラー
     throw new Error("認証情報が不足しています");
   }
@@ -350,7 +387,7 @@ export async function getMonthlyData(
 
   const r = await callGAS<KintaiRecord[]>(
     "getMonthlyData",
-    { spreadsheetId, userId, year, month },
+    { userId, year, month },
     true,
   );
 
@@ -585,14 +622,9 @@ export const isAuthenticated = (): boolean => {
   const token = localStorage.getItem(TOKEN_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
   const userName = localStorage.getItem(USER_NAME_KEY);
-  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
 
   // 全ての必要な認証情報が存在するかチェック
-  const isValid =
-    token !== null &&
-    userId !== null &&
-    userName !== null &&
-    spreadsheetId !== null;
+  const isValid = token !== null && userId !== null && userName !== null;
 
   // デバッグ: 認証状態を詳細ログ出力
   // 認証状態チェック
@@ -605,8 +637,7 @@ export const getUserName = (): string | null =>
 
 export const getUserId = (): string | null => localStorage.getItem(USER_ID_KEY);
 
-export const getSpreadsheetId = (): string | null =>
-  localStorage.getItem(SHEET_ID_KEY);
+// getSpreadsheetId関数は削除 - 現在開いているスプレッドシートを使用するため不要
 
 /* ========= バージョン管理 ========= */
 /**
@@ -665,6 +696,103 @@ export const checkVersionCompatibility = (): {
   }
 
   return { compatible: true };
+};
+
+/* ========= Join機能 ========= */
+
+/**
+ * 顧客情報の型定義
+ */
+export interface CustomerInfo {
+  customerCode: string;
+  serverName: string;
+  spreadsheetId: string;
+}
+
+/**
+ * 顧客コード（サーバー名）で顧客情報を検索
+ * @param customerCode 検索する顧客コード（サーバー名）
+ * @returns 顧客情報またはエラー
+ */
+/**
+ * MasterConfig.gs用のAPIエンドポイントを取得
+ * 開発環境ではプロキシ経由、本番環境では直接GAS URLを使用
+ * @returns MasterConfig.gsのAPIエンドポイントURL
+ */
+const getMasterConfigApiUrl = (): string => {
+  if (isDevelopment) {
+    // 開発環境ではプロキシ経由でアクセス
+    return (
+      import.meta.env.VITE_DEV_MASTER_CONFIG_PROXY_PATH || "/api/master-config"
+    );
+  } else {
+    // 本番環境では直接GAS URLを使用
+    return (
+      import.meta.env.VITE_MASTER_CONFIG_API_URL ||
+      "https://script.google.com/macros/s/AKfycbxPMNkuofB1CMjD872rhc6XomIckDxCjd0mYxn-szgQP2AIxkb7v5IC-qxx4P5dEK_x/exec"
+    );
+  }
+};
+
+export const findCustomerByCode = async (
+  customerCode: string,
+): Promise<ApiResp<CustomerInfo>> => {
+  if (!customerCode || customerCode.trim() === "") {
+    return {
+      success: false,
+      error: "顧客コードが指定されていません",
+    };
+  }
+
+  const payload = {
+    action: "findCustomerByCode",
+    customerCode: customerCode.trim(),
+  };
+
+  if (DEBUG_MODE()) {
+    console.log("🔍 findCustomerByCode API呼び出し:", payload);
+  }
+
+  try {
+    const response = await fetchWithRetry(getMasterConfigApiUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    if (DEBUG_MODE()) {
+      console.log("🔍 findCustomerByCode API応答:", result);
+    }
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: result.data as CustomerInfo,
+      };
+    } else {
+      return {
+        success: false,
+        error: result.error || result.message || "顧客情報の取得に失敗しました",
+      };
+    }
+  } catch (error) {
+    if (DEBUG_MODE()) {
+      console.error("🚨 findCustomerByCode APIエラー:", error);
+    }
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "通信エラーが発生しました",
+    };
+  }
 };
 //   const year = date.getFullYear();
 //   const month = (date.getMonth() + 1).toString().padStart(2, '0');

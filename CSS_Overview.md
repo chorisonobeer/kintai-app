@@ -7,6 +7,7 @@
 **問題**: 日付選択部分で背景が二重に表示されていた
 
 **修正箇所**: `styles.css`
+
 ```css
 /* ヘッダー部分（日付選択）- 固定 */
 .kintai-form-header {
@@ -21,6 +22,7 @@
 **問題**: スライドアニメーションが遅く感じられた
 
 **修正箇所1**: `styles.css`
+
 ```css
 /* スライドアニメーション用のクラス */
 .slide-out-left {
@@ -41,11 +43,12 @@
 ```
 
 **修正箇所2**: `KintaiForm.tsx`
+
 ```typescript
 // アニメーション開始後に日付を更新
 setTimeout(() => {
   dispatch({ type: EditActionType.DATE_CHANGE, payload: date });
-  
+
   // アニメーション終了
   setTimeout(() => {
     setIsAnimating(false);
@@ -58,17 +61,20 @@ setTimeout(() => {
 ## 主要なCSSクラス構造
 
 ### フォーム全体
+
 - `.kintai-form`: メインコンテナ
 - `.kintai-form-header`: 固定ヘッダー（日付選択部分）
 - `.kintai-form-content`: スライドするコンテンツ部分
 
 ### アニメーション関連
+
 - `.slide-out-left`: 左にスライドアウト
 - `.slide-in-right`: 右からスライドイン
 - `.slide-out-right`: 右にスライドアウト
 - `.slide-in-left`: 左からスライドイン
 
 ### 日付選択関連
+
 - `.date-picker-wrapper`: 日付選択ラッパー
 - `.date-selector-container`: 日付選択コンテナ
 - `.month-control`: 月コントロール

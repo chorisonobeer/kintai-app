@@ -13,6 +13,7 @@
 `gas-version-functions.gs` ファイルの内容を既存のGASスクリプトに追加：
 
 #### 追加する関数：
+
 - `handleGetVersion(payload)` - バージョン情報取得
 - `handleGetVersionHistory(payload)` - バージョン履歴取得
 
@@ -31,7 +32,7 @@ case 'getVersionHistory':
 ### 4. デプロイ
 
 1. **保存**: Ctrl+S でスクリプトを保存
-2. **新しいデプロイ**: 
+2. **新しいデプロイ**:
    - 「デプロイ」→「新しいデプロイ」をクリック
    - 種類：「ウェブアプリ」を選択
    - 説明：「バージョン情報機能追加 v1.2.0」
@@ -59,7 +60,7 @@ const versionInfo = {
   description: "勤怠管理システム - 安定版", // ← 必要に応じて更新
   features: [
     // ← 機能リストを更新
-  ]
+  ],
 };
 ```
 
@@ -73,10 +74,7 @@ const versionHistory = [
     version: "v1.3.0", // 新しいバージョン
     date: "2025-01-20",
     description: "新機能追加",
-    changes: [
-      "新機能1",
-      "新機能2"
-    ]
+    changes: ["新機能1", "新機能2"],
   },
   // 既存のバージョン履歴...
 ];

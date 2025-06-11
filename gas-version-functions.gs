@@ -12,7 +12,7 @@ function handleGetVersion(payload) {
     // トークン検証（必要に応じて）
     const tokenValidation = validateToken(payload.token);
     if (!tokenValidation.isValid) {
-      return createErrorResponse('INVALID_TOKEN', tokenValidation.message);
+      return createErrorResponse("INVALID_TOKEN", tokenValidation.message);
     }
 
     // バージョン情報を返す
@@ -24,14 +24,17 @@ function handleGetVersion(payload) {
         "勤怠データ登録・取得",
         "月次データ表示",
         "認証機能",
-        "バージョン管理"
-      ]
+        "バージョン管理",
+      ],
     };
 
     return createSuccessResponse(versionInfo);
   } catch (error) {
-    console.error('バージョン情報取得エラー:', error);
-    return createErrorResponse('VERSION_ERROR', 'バージョン情報の取得に失敗しました');
+    console.error("バージョン情報取得エラー:", error);
+    return createErrorResponse(
+      "VERSION_ERROR",
+      "バージョン情報の取得に失敗しました"
+    );
   }
 }
 
@@ -43,7 +46,7 @@ function handleGetVersionHistory(payload) {
     // トークン検証（必要に応じて）
     const tokenValidation = validateToken(payload.token);
     if (!tokenValidation.isValid) {
-      return createErrorResponse('INVALID_TOKEN', tokenValidation.message);
+      return createErrorResponse("INVALID_TOKEN", tokenValidation.message);
     }
 
     // バージョン履歴を返す
@@ -55,8 +58,8 @@ function handleGetVersionHistory(payload) {
         changes: [
           "ヘッダーバージョン表示機能追加",
           "認証強化",
-          "データ整合性チェック改善"
-        ]
+          "データ整合性チェック改善",
+        ],
       },
       {
         version: "v1.1.0",
@@ -65,37 +68,36 @@ function handleGetVersionHistory(payload) {
         changes: [
           "ログイン時のデータクリア機能",
           "認証チェック強化",
-          "スマートフォン対応改善"
-        ]
+          "スマートフォン対応改善",
+        ],
       },
       {
         version: "v1.0.0",
         date: "2025-01-01",
         description: "初期リリース",
-        changes: [
-          "基本的な勤怠管理機能",
-          "月次データ表示",
-          "ユーザー認証"
-        ]
-      }
+        changes: ["基本的な勤怠管理機能", "月次データ表示", "ユーザー認証"],
+      },
     ];
 
     return createSuccessResponse(versionHistory);
   } catch (error) {
-    console.error('バージョン履歴取得エラー:', error);
-    return createErrorResponse('VERSION_HISTORY_ERROR', 'バージョン履歴の取得に失敗しました');
+    console.error("バージョン履歴取得エラー:", error);
+    return createErrorResponse(
+      "VERSION_HISTORY_ERROR",
+      "バージョン履歴の取得に失敗しました"
+    );
   }
 }
 
 /**
  * メインのdoPost関数の更新例
  * 既存のdoPost関数に以下のケースを追加してください：
- * 
+ *
  * function doPost(e) {
  *   try {
  *     const payload = JSON.parse(e.postData.contents);
  *     const action = payload.action;
- * 
+ *
  *     switch (action) {
  *       // 既存のケース...
  *       case 'login':
@@ -106,13 +108,13 @@ function handleGetVersionHistory(payload) {
  *         return handleGetKintaiHistory(payload);
  *       case 'getMonthlyData':
  *         return handleGetMonthlyData(payload);
- *       
+ *
  *       // 新規追加
  *       case 'getVersion':
  *         return handleGetVersion(payload);
  *       case 'getVersionHistory':
  *         return handleGetVersionHistory(payload);
- *       
+ *
  *       default:
  *         return createErrorResponse('INVALID_ACTION', '無効なアクションです');
  *     }

@@ -33,7 +33,7 @@ export const formatShortDate = (dateString: string): string => {
 };
 
 /**
- * 指定された日付が2日以上前かどうかをチェックする
+ * 指定された日付が20日以上前かどうかをチェックする
  */
 export const isDateTooOld = (dateString: string): boolean => {
   const selectedDate = new Date(dateString);
@@ -47,7 +47,7 @@ export const isDateTooOld = (dateString: string): boolean => {
   const timeDiff = today.getTime() - selectedDate.getTime();
   const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
 
-  return diffDays > 2;
+  return diffDays > 20;
 };
 
 /**
@@ -69,7 +69,7 @@ export const parseTimeStringToMinutes = (timeString: string): number => {
 
 /**
  * 日付が許容範囲内かどうかチェックする
- * 現在より2日前から当日までが有効
+ * 現在より20日前から当日までが有効
  */
 export const isDateInValidRange = (dateString: string): boolean => {
   const selectedDate = new Date(dateString);
@@ -83,8 +83,8 @@ export const isDateInValidRange = (dateString: string): boolean => {
   const timeDiff = today.getTime() - selectedDate.getTime();
   const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
 
-  // 2日前から当日（0以上2以下）
-  return diffDays >= 0 && diffDays <= 2;
+  // 20日前から当日（0以上20以下）
+  return diffDays >= 0 && diffDays <= 20;
 };
 
 /**
@@ -113,14 +113,14 @@ export const getWeekdayName = (dateString: string): string => {
 };
 
 /**
- * 選択可能な日付の配列を取得する（今日から2日前まで）
+ * 選択可能な日付の配列を取得する（今日から20日前まで）
  * 日付選択コンポーネント用のラベル付きオブジェクトを返す
  */
 export const getSelectableDates = (): { value: string; label: string }[] => {
   const today = new Date();
   const dates = [];
 
-  for (let i = 0; i <= 2; i += 1) {
+  for (let i = 0; i <= 20; i += 1) {
     const date = new Date();
     date.setDate(today.getDate() - i);
     const dateString = formatDate(date);

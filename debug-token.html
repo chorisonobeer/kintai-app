@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>勤怠アプリ - トークンデバッグツール</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .section {
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #fafafa;
+      }
+      .section h2 {
+        color: #555;
+        margin-top: 0;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 5px;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      button.danger {
+        background-color: #dc3545;
+      }
+      button.danger:hover {
+        background-color: #c82333;
+      }
+      button.success {
+        background-color: #28a745;
+      }
+      button.success:hover {
+        background-color: #218838;
+      }
+      .info {
+        background-color: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+      .warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+      .error {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+      .success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+      pre {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        padding: 15px;
+        border-radius: 6px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .status {
+        font-weight: bold;
+        padding: 10px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔧 勤怠アプリ - トークンデバッグツール</h1>
+
+      <div class="info">
+        <strong>📋 使用方法:</strong><br />
+        1. まず「現在の状態を確認」ボタンでローカルストレージの状態を確認<br />
+        2.
+        「トークンが無効です」エラーが出ている場合は「ローカルストレージをクリア」<br />
+        3. クリア後、勤怠アプリに戻って再ログイン
+      </div>
+
+      <div class="section">
+        <h2>🔍 現在の状態確認</h2>
+        <button onclick="checkCurrentStatus()">現在の状態を確認</button>
+        <div id="statusResult"></div>
+      </div>
+
+      <div class="section">
+        <h2>🧹 ローカルストレージ管理</h2>
+        <button class="danger" onclick="clearKintaiData()">
+          勤怠アプリのデータをクリア
+        </button>
+        <button class="danger" onclick="clearAllLocalStorage()">
+          全てのローカルストレージをクリア
+        </button>
+        <div id="clearResult"></div>
+      </div>
+
+      <div class="section">
+        <h2>🔗 アプリへのリンク</h2>
+        <button class="success" onclick="openKintaiApp()">
+          勤怠アプリを開く
+        </button>
+        <div class="info">
+          <strong>注意:</strong>
+          ローカルストレージをクリアした後は、勤怠アプリで再ログインが必要です。
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📊 詳細情報</h2>
+        <button onclick="showDetailedInfo()">詳細情報を表示</button>
+        <div id="detailedInfo"></div>
+      </div>
+    </div>
+
+    <script>
+      function checkCurrentStatus() {
+        const statusDiv = document.getElementById("statusResult");
+
+        const token = localStorage.getItem("kintai_token");
+        const userId = localStorage.getItem("kintai_user_id");
+        const userName = localStorage.getItem("kintai_user_name");
+
+        let html = '<div class="status">';
+
+        if (token && userId && userName) {
+          html += '<div class="success">✅ 認証情報が存在します</div>';
+          html += `<div class="info">`;
+          html += `<strong>ユーザーID:</strong> ${userId}<br>`;
+          html += `<strong>ユーザー名:</strong> ${userName}<br>`;
+          html += `<strong>トークン:</strong> ${token.substring(0, 20)}...<br>`;
+          html += `<strong>トークン長:</strong> ${token.length}文字`;
+          html += `</div>`;
+        } else {
+          html +=
+            '<div class="warning">⚠️ 認証情報が不完全または存在しません</div>';
+          html += `<div class="info">`;
+          html += `<strong>トークン:</strong> ${token ? "存在" : "❌ なし"}<br>`;
+          html += `<strong>ユーザーID:</strong> ${userId ? "存在" : "❌ なし"}<br>`;
+          html += `<strong>ユーザー名:</strong> ${userName ? "存在" : "❌ なし"}`;
+          html += `</div>`;
+        }
+
+        // セッションストレージの確認
+        const monthlyData = sessionStorage.getItem("kintai_monthly_data");
+        const monthlyTimestamp = sessionStorage.getItem(
+          "kintai_monthly_data_timestamp"
+        );
+
+        html += `<div class="info">`;
+        html += `<strong>月次データキャッシュ:</strong> ${monthlyData ? "存在" : "なし"}<br>`;
+        html += `<strong>キャッシュタイムスタンプ:</strong> ${monthlyTimestamp ? new Date(parseInt(monthlyTimestamp)).toLocaleString() : "なし"}`;
+        html += `</div>`;
+
+        html += "</div>";
+        statusDiv.innerHTML = html;
+      }
+
+      function clearKintaiData() {
+        const resultDiv = document.getElementById("clearResult");
+
+        try {
+          // ローカルストレージから勤怠アプリ関連のデータを削除
+          localStorage.removeItem("kintai_token");
+          localStorage.removeItem("kintai_user_id");
+          localStorage.removeItem("kintai_user_name");
+          localStorage.removeItem("kintai_current_customer");
+          localStorage.removeItem("kintai_customer_spreadsheet_id");
+          localStorage.removeItem("kintai_server_version");
+
+          // セッションストレージからキャッシュを削除
+          sessionStorage.removeItem("kintai_monthly_data");
+          sessionStorage.removeItem("kintai_monthly_data_timestamp");
+
+          resultDiv.innerHTML =
+            '<div class="success">✅ 勤怠アプリのデータをクリアしました！<br>勤怠アプリに戻って再ログインしてください。</div>';
+        } catch (error) {
+          resultDiv.innerHTML = `<div class="error">❌ エラーが発生しました: ${error.message}</div>`;
+        }
+      }
+
+      function clearAllLocalStorage() {
+        const resultDiv = document.getElementById("clearResult");
+
+        if (
+          confirm(
+            "全てのローカルストレージデータを削除しますか？\n（他のWebサイトのデータも含まれます）"
+          )
+        ) {
+          try {
+            localStorage.clear();
+            sessionStorage.clear();
+            resultDiv.innerHTML =
+              '<div class="success">✅ 全てのローカルストレージをクリアしました！</div>';
+          } catch (error) {
+            resultDiv.innerHTML = `<div class="error">❌ エラーが発生しました: ${error.message}</div>`;
+          }
+        }
+      }
+
+      function openKintaiApp() {
+        // 現在のドメインのルートに移動（勤怠アプリのindex.html）
+        window.location.href = "/";
+      }
+
+      function showDetailedInfo() {
+        const detailDiv = document.getElementById("detailedInfo");
+
+        let html = "<h3>📋 ローカルストレージ全体</h3>";
+        html += "<pre>";
+
+        const localStorageData = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          const value = localStorage.getItem(key);
+          localStorageData[key] = value;
+        }
+
+        html += JSON.stringify(localStorageData, null, 2);
+        html += "</pre>";
+
+        html += "<h3>📋 セッションストレージ全体</h3>";
+        html += "<pre>";
+
+        const sessionStorageData = {};
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          const value = sessionStorage.getItem(key);
+          sessionStorageData[key] = value;
+        }
+
+        html += JSON.stringify(sessionStorageData, null, 2);
+        html += "</pre>";
+
+        html += "<h3>🌐 ブラウザ情報</h3>";
+        html += "<pre>";
+        html += `User Agent: ${navigator.userAgent}\n`;
+        html += `URL: ${window.location.href}\n`;
+        html += `Domain: ${window.location.hostname}\n`;
+        html += `Protocol: ${window.location.protocol}\n`;
+        html += `現在時刻: ${new Date().toLocaleString()}`;
+        html += "</pre>";
+
+        detailDiv.innerHTML = html;
+      }
+
+      // ページ読み込み時に自動で状態確認
+      window.addEventListener("load", function () {
+        checkCurrentStatus();
+      });
+    </script>
+  </body>
+</html>

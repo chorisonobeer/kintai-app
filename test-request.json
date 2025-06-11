@@ -1,0 +1,7 @@
+{
+  "action": "findCustomerByCode",
+  "payload": {
+    "customerCode": "test123"
+  },
+  "debug": true
+}

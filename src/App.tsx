@@ -4,27 +4,55 @@
  * 変更概要: 更新 - 共通ヘッダーコンポーネントの追加、レイアウト統一
  */
 import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import KintaiForm from "./components/KintaiForm";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import Join from "./components/Join";
 import Login from "./components/Login";
+import KintaiForm from "./components/KintaiForm";
 import MonthlyView from "./components/MonthlyView";
+
 import Header from "./components/Header";
-import { isAuthenticated, logout } from "./utils/apiService";
 import { KintaiProvider } from "./contexts/KintaiContext";
+import { isAuthenticated, logout, CustomerInfo } from "./utils/apiService";
 import { backgroundSyncManager } from "./utils/backgroundSync";
 
-// 認証保護ルート用のラッパーコンポーネント
-const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) =>
-  isAuthenticated() ? <>{element}</> : <Navigate to="/login" replace />;
+import "./styles.css";
 
 const App: React.FC = () => {
+  // 認証保護ルート用のラッパーコンポーネント
+  const ProtectedRoute: React.FC<{
+    element: React.ReactNode;
+  }> = ({ element }) => {
+    if (!isAuthenticated()) {
+      return <Navigate to="/join" replace />;
+    }
+
+    return <>{element}</>;
+  };
+
+  // Join成功時の処理
+  const handleJoinSuccess = (customerInfo: CustomerInfo) => {
+    // サーバー情報をローカルストレージに保存
+    localStorage.setItem("kintai_server_info", JSON.stringify(customerInfo));
+    // Login画面に遷移
+    window.location.href = "/login";
+  };
+
   // アプリ起動時にlocalStorageの整合性をチェック
   useEffect(() => {
     // アプリ起動時チェック
     // 認証が必要なページで認証情報が不完全な場合は強制ログアウト
-    if (window.location.pathname !== "/login" && !isAuthenticated()) {
+    if (
+      window.location.pathname !== "/login" &&
+      window.location.pathname !== "/join" &&
+      !isAuthenticated()
+    ) {
       logout();
-      window.location.href = "/login";
+      window.location.href = "/join";
     }
 
     // Service Workerの登録とバックグラウンド同期の初期化
@@ -95,26 +123,39 @@ const App: React.FC = () => {
         break;
 
       default:
-        // 未知のService Workerメッセージ
+      // 未知のService Workerメッセージ
     }
   };
 
   // ログアウト処理を一元管理
   const handleLogout = () => {
     logout();
-    window.location.href = "/login";
+    // サーバー情報もクリア
+    localStorage.removeItem("kintai_server_info");
+    window.location.href = "/join";
   };
 
   return (
     <div className="container">
-      <BrowserRouter>
+      <Router>
         <KintaiProvider>
           <Routes>
+            {/* Join画面（サーバー選択） - ヘッダーなし */}
+            <Route
+              path="/join"
+              element={<Join onJoinSuccess={handleJoinSuccess} />}
+            />
+
             {/* ログイン画面 - ヘッダーなし */}
             <Route
               path="/login"
               element={
-                <Login onLoginSuccess={() => (window.location.href = "/")} />
+                <Login
+                  onLoginSuccess={() => {
+                    // ログイン成功後の処理
+                    window.location.href = "/";
+                  }}
+                />
               }
             />
 
@@ -145,10 +186,10 @@ const App: React.FC = () => {
                 />
               }
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/join" replace />} />
           </Routes>
         </KintaiProvider>
-      </BrowserRouter>
+      </Router>
     </div>
   );
 };

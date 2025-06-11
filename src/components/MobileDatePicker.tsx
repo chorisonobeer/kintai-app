@@ -50,7 +50,7 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
-    const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+    const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
     const weekday = weekdays[date.getDay()];
     return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} (${weekday})`;
   };

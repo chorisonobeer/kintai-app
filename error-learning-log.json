@@ -1,0 +1,22 @@
+﻿{
+    "statistics":  {
+                       "totalErrors":  1,
+                       "resolvedErrors":  0,
+                       "lastUpdate":  "2025-06-09 11:21:20"
+                   },
+    "ruleUpdates":  [
+
+                    ],
+    "errorPatterns":  [
+                          {
+                              "frequency":  1,
+                              "resolved":  false,
+                              "timestamp":  "2025-06-09 11:21:20",
+                              "id":  "ebe1d13f-3206-449c-a7c9-797396b9c0a5",
+                              "proposedSolution":  "Review error details and check API documentation",
+                              "context":  "API Test",
+                              "errorType":  "Network",
+                              "errorMessage":  "リモート サーバーがエラーを返しました: (404) 見つかりません"
+                          }
+                      ]
+}

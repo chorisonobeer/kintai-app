@@ -3,6 +3,15 @@
   publish   = "dist"
   functions = "netlify/functions"
 
+# 環境変数設定（本番環境）
+[build.environment]
+VITE_GAS_API_URL = "https://script.google.com/macros/s/AKfycbxPMNkuofB1CMjD872rhc6XomIckDxCjd0mYxn-szgQP2AIxkb7v5IC-qxx4P5dEK_x/exec"
+VITE_MASTER_CONFIG_API_URL = "https://script.google.com/macros/s/AKfycbywQKFSVSwsw8K3x2vfHly9C_Bnv4EF4-Y7DZhLvj1VBpeCT5VZx4hAvPXy2KcXKN6U/exec"
+VITE_DEV_PROXY_PATH = "/api/gas"
+VITE_DEV_MASTER_CONFIG_PROXY_PATH = "/api/master-config"
+GAS_API_URL = "https://script.google.com/macros/s/AKfycbxPMNkuofB1CMjD872rhc6XomIckDxCjd0mYxn-szgQP2AIxkb7v5IC-qxx4P5dEK_x/exec"
+MASTER_CONFIG_GAS_API_URL = "https://script.google.com/macros/s/AKfycbywQKFSVSwsw8K3x2vfHly9C_Bnv4EF4-Y7DZhLvj1VBpeCT5VZx4hAvPXy2KcXKN6U/exec"
+
 [dev]
   command    = "npm run dev"   # ← ご自身の Vite 起動コマンド
   targetPort = 5173            # ← Vite が listen するポート

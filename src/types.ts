@@ -81,7 +81,6 @@ export type KintaiRecord = {
 // ————————————————————————————————
 // 履歴取得 API のパラメータ
 export type HistoryParams = {
-  spreadsheetId: string;
   userId: string;
   year: number;
   month: number;

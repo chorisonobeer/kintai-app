@@ -1,25 +1,28 @@
 import React, { useState } from "react";
-import { login } from "../utils/apiService";
+import { findCustomerByCode } from "../utils/apiService";
 
-interface LoginProps {
-  onLoginSuccess: () => void;
+interface JoinProps {
+  onJoinSuccess: (customerInfo: CustomerInfo) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
+interface CustomerInfo {
+  customerCode: string;
+  serverName: string;
+  spreadsheetId: string;
+}
+
+const Join: React.FC<JoinProps> = ({ onJoinSuccess }) => {
+  const [serverName, setServerName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [serverName, setServerName] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name || !password) {
-      setError("名前とパスワードを入力してください");
+    if (!serverName.trim()) {
+      setError("サーバー名を入力してください");
       return;
     }
 
@@ -30,16 +33,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     const startTime = Date.now();
     const debugData: any = {
       timestamp: new Date().toISOString(),
-      input: { name, password: "[HIDDEN]" },
+      input: { serverName: serverName.trim() },
       environment: {
         isDev: import.meta.env.DEV,
         mode: import.meta.env.MODE,
         baseUrl: import.meta.env.BASE_URL,
-      },
-      localStorage: {
-        token: localStorage.getItem("kintai_token") ? "[EXISTS]" : "[NONE]",
-        userId: localStorage.getItem("kintai_user_id") || "[NONE]",
-        userName: localStorage.getItem("kintai_user_name") || "[NONE]",
       },
     };
 
@@ -47,48 +45,49 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       // デバッグモードの場合のみログ出力
       const isDebugMode = localStorage.getItem("kintai_debug_mode") === "true";
       if (isDebugMode) {
-        console.log("🔐 ログイン開始:", debugData);
+        console.log("🔍 サーバー検索開始:", debugData);
       }
 
-      const result = await login(name, password);
+      const result = await findCustomerByCode(serverName.trim());
 
       const endTime = Date.now();
       debugData.duration = `${endTime - startTime}ms`;
       debugData.result = {
         success: result.success,
-        error: result.error || null,
-      };
-      debugData.localStorageAfter = {
-        token: localStorage.getItem("kintai_token") ? "[EXISTS]" : "[NONE]",
-        userId: localStorage.getItem("kintai_user_id") || "[NONE]",
-        userName: localStorage.getItem("kintai_user_name") || "[NONE]",
+        data: result.success && "data" in result ? result.data || null : null,
+        error:
+          !result.success && "error" in result ? result.error || null : null,
       };
 
       setDebugInfo(debugData);
 
       if (isDebugMode) {
-        console.log("🔐 ログイン結果:", debugData);
+        console.log("🔍 サーバー検索結果:", debugData);
       }
 
-      if (result.success) {
+      if (result.success && result.data) {
         if (isDebugMode) {
-          console.log("✅ ログイン成功 - onLoginSuccess()を呼び出します");
+          console.log("✅ サーバー検索成功 - onJoinSuccess()を呼び出します");
         }
 
-        // ログイン成功時にサーバー名を表示
-        setServerName(name);
-        setShowSuccessModal(true);
+        // サーバー情報をローカルストレージに保存
+        localStorage.setItem("kintai_server_info", JSON.stringify(result.data));
 
-        // 2秒後に次の画面に遷移
-        setTimeout(() => {
-          setShowSuccessModal(false);
-          onLoginSuccess();
-        }, 2000);
+        onJoinSuccess(result.data);
       } else {
         if (isDebugMode) {
-          console.log("❌ ログイン失敗:", result.error);
+          console.log(
+            "❌ サーバー検索失敗:",
+            !result.success && "error" in result
+              ? result.error
+              : "Unknown error",
+          );
         }
-        setError(result.error || "ログインに失敗しました");
+        setError(
+          !result.success && "error" in result
+            ? result.error || "サーバーが見つかりませんでした"
+            : "サーバーが見つかりませんでした",
+        );
       }
     } catch (err) {
       const endTime = Date.now();
@@ -103,7 +102,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
       const isDebugMode = localStorage.getItem("kintai_debug_mode") === "true";
       if (isDebugMode) {
-        console.error("🚨 ログインエラー:", debugData);
+        console.error("🚨 サーバー検索エラー:", debugData);
       }
       setError("通信エラーが発生しました");
     } finally {
@@ -113,7 +112,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="kintai-form">
-      <h2 className="login-title">ログイン</h2>
+      <h2 className="join-title">サーバー選択</h2>
+      <p className="join-description">
+        勤怠管理を行うサーバー名を入力してください
+      </p>
 
       {error && <div className="error-message">{error}</div>}
 
@@ -151,71 +153,133 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
           {showDebug && (
             <div className="debug-info">
-              <h3>🔍 ログインデバッグ情報</h3>
+              <h3>🔍 サーバー検索デバッグ情報</h3>
               <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
             </div>
           )}
         </div>
       )}
 
-      {/* ログイン成功モーダル */}
-      {showSuccessModal && (
-        <div className="success-modal-overlay">
-          <div className="success-modal">
-            <div className="success-icon">✅</div>
-            <h2>ログイン成功！</h2>
-            <p>
-              サーバー名: <strong>{serverName}</strong>
-            </p>
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="name">名前</label>
+          <label htmlFor="serverName">サーバー名</label>
           <div className="input-wrapper">
             <input
               type="text"
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              id="serverName"
+              value={serverName}
+              onChange={(e) => setServerName(e.target.value)}
               disabled={isLoading}
-              autoComplete="name"
-              className="login-input"
-            />
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="password">パスワード</label>
-          <div className="input-wrapper">
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoading}
-              autoComplete="current-password"
-              className="login-input"
+              placeholder="例: company-server-01"
+              className="join-input"
+              autoComplete="off"
             />
           </div>
         </div>
 
         <div className="button-container">
-          <button type="submit" className="btn" disabled={isLoading}>
-            {isLoading ? "ログイン中..." : "ログイン"}
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={isLoading}
+          >
+            {isLoading ? "検索中..." : "サーバーを検索"}
           </button>
         </div>
       </form>
+
+      <div className="join-help">
+        <h3>サーバー名について</h3>
+        <ul>
+          <li>管理者から提供されたサーバー名を正確に入力してください</li>
+          <li>大文字・小文字は区別されません</li>
+          <li>サーバー名が見つからない場合は、管理者にお問い合わせください</li>
+        </ul>
+      </div>
     </div>
   );
 };
 
-export default Login;
+export default Join;
 
-// デバッグ用スタイル
-const debugStyles = `
+// Join画面用スタイル
+const joinStyles = `
+.join-title {
+  text-align: center;
+  color: #333;
+  margin-bottom: 8px;
+  font-size: 24px;
+}
+
+.join-description {
+  text-align: center;
+  color: #666;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+.join-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+}
+
+.join-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  width: 100%;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-primary:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.join-help {
+  margin-top: 32px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.join-help h3 {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 16px;
+}
+
+.join-help ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.join-help li {
+  margin-bottom: 8px;
+  color: #6c757d;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .debug-controls {
   margin: 10px 0;
   padding: 10px;
@@ -281,55 +345,11 @@ const debugStyles = `
   white-space: pre-wrap;
   word-wrap: break-word;
 }
-
-.success-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.success-modal {
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  text-align: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  max-width: 400px;
-  width: 90%;
-}
-
-.success-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.success-modal h2 {
-  margin: 0 0 16px 0;
-  color: #28a745;
-  font-size: 24px;
-}
-
-.success-modal p {
-  margin: 0;
-  font-size: 16px;
-  color: #333;
-}
-
-.success-modal strong {
-  color: #007bff;
-}
 `;
 
 // スタイルを動的に追加
 if (typeof document !== "undefined") {
   const styleElement = document.createElement("style");
-  styleElement.textContent = debugStyles;
+  styleElement.textContent = joinStyles;
   document.head.appendChild(styleElement);
 }

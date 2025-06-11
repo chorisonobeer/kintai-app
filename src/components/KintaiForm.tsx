@@ -45,7 +45,7 @@ const initialState: KintaiFormState = {
 // 編集アクション処理用reducer
 const editReducer = (
   state: KintaiFormState,
-  action: { type: EditActionType; payload?: any },
+  action: { type: EditActionType; payload?: any }
 ): KintaiFormState => {
   switch (action.type) {
     case EditActionType.TOUCH_START:
@@ -98,7 +98,7 @@ const editReducer = (
 const calculateWorkingTime = (
   startTime: string,
   endTime: string,
-  breakTime: string,
+  breakTime: string
 ): string => {
   // 入力値が不完全な場合は空文字を返す
   if (!startTime || !endTime) {
@@ -108,7 +108,7 @@ const calculateWorkingTime = (
   try {
     // 時間文字列をパース
     const parseTime = (
-      timeStr: string,
+      timeStr: string
     ): { hours: number; minutes: number } | null => {
       const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
       if (!match) return null;
@@ -200,7 +200,7 @@ const KintaiForm: React.FC = () => {
 
   // ローディング状態を管理
   const [isDataLoading, setIsDataLoading] = useState(false);
-  
+
   // 削除確認モーダルの状態
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -209,7 +209,7 @@ const KintaiForm: React.FC = () => {
    * 数値（分）、文字列（HH:mm）、undefined/null に対応
    */
   const formatBreakTime = (
-    breakTime: number | string | undefined | null,
+    breakTime: number | string | undefined | null
   ): string => {
     // undefinedやnullの場合は空文字を返す（未入力状態）
     if (breakTime === undefined || breakTime === null) return "";
@@ -267,7 +267,7 @@ const KintaiForm: React.FC = () => {
     const calculatedWorkingTime = calculateWorkingTime(
       startTime,
       endTime,
-      breakTime,
+      breakTime
     );
     setWorkingTime(calculatedWorkingTime);
   }, [startTime, endTime, breakTime]);
@@ -324,18 +324,16 @@ const KintaiForm: React.FC = () => {
               setStartTime(
                 data.startTime !== undefined
                   ? data.startTime
-                  : initialState.startTime,
+                  : initialState.startTime
               );
               setBreakTime(breakTimeAsString);
               setEndTime(
-                data.endTime !== undefined
-                  ? data.endTime
-                  : initialState.endTime,
+                data.endTime !== undefined ? data.endTime : initialState.endTime
               );
               setLocation(
                 data.location !== undefined
                   ? data.location
-                  : initialState.location,
+                  : initialState.location
               );
               setWorkingTime(data.workingTime || "");
               dispatch({
@@ -528,21 +526,21 @@ const KintaiForm: React.FC = () => {
     dispatch({ type: EditActionType.TOUCH_START });
     setIsLongPressing(true);
     setLongPressProgress(0);
-    
+
     // プログレスバーのアニメーション
     const startTime = Date.now();
     const duration = 1000; // 1秒
-    
+
     const updateProgress = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min((elapsed / duration) * 100, 100);
       setLongPressProgress(progress);
-      
+
       if (progress < 100) {
         longPressIntervalRef.current = setTimeout(updateProgress, 16); // 60fps
       }
     };
-    
+
     updateProgress();
   };
 
@@ -550,7 +548,7 @@ const KintaiForm: React.FC = () => {
     dispatch({ type: EditActionType.TOUCH_END });
     setIsLongPressing(false);
     setLongPressProgress(0);
-    
+
     if (longPressIntervalRef.current) {
       clearTimeout(longPressIntervalRef.current);
       longPressIntervalRef.current = null;
@@ -722,11 +720,18 @@ const KintaiForm: React.FC = () => {
               >
                 保存する
               </button>
-              <div className="button-row" style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <div
+                className="button-row"
+                style={{ display: "flex", gap: "8px", marginTop: "8px" }}
+              >
                 <button
                   className="btn"
                   onClick={handleDeleteClick}
-                  style={{ flex: 1, backgroundColor: "#f44336", color: "white" }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#f44336",
+                    color: "white",
+                  }}
                   disabled={isSubmitting}
                 >
                   削除
@@ -743,7 +748,7 @@ const KintaiForm: React.FC = () => {
             </>
           ) : formState.isSaved ? (
             <button
-              className={`${getButtonClassName()} ${isLongPressing ? 'long-pressing' : ''}`}
+              className={`${getButtonClassName()} ${isLongPressing ? "long-pressing" : ""}`}
               onTouchStart={isVeryOldDate() ? undefined : handleLongPressStart}
               onTouchEnd={isVeryOldDate() ? undefined : handleLongPressEnd}
               onMouseDown={isVeryOldDate() ? undefined : handleLongPressStart}
@@ -751,11 +756,11 @@ const KintaiForm: React.FC = () => {
               onMouseLeave={isVeryOldDate() ? undefined : handleLongPressEnd}
               disabled={isSubmitting || isVeryOldDate()}
               style={{
-                position: 'relative',
-                overflow: 'hidden',
-                backgroundColor: isLongPressing 
-                  ? `rgba(76, 175, 80, ${0.7 + (longPressProgress / 100) * 0.3})` 
-                  : undefined
+                position: "relative",
+                overflow: "hidden",
+                backgroundColor: isLongPressing
+                  ? `rgba(76, 175, 80, ${0.7 + (longPressProgress / 100) * 0.3})`
+                  : undefined,
               }}
             >
               {/* プログレスバー */}
@@ -763,19 +768,20 @@ const KintaiForm: React.FC = () => {
                 <div
                   className="long-press-progress"
                   style={{
-                    position: 'absolute',
+                    position: "absolute",
                     top: 0,
                     left: 0,
-                    height: '100%',
+                    height: "100%",
                     width: `${longPressProgress}%`,
-                    background: 'linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.5) 100%)',
-                    transition: 'none',
-                    pointerEvents: 'none',
-                    zIndex: 1
+                    background:
+                      "linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.5) 100%)",
+                    transition: "none",
+                    pointerEvents: "none",
+                    zIndex: 1,
                   }}
                 />
               )}
-              <span style={{ position: 'relative', zIndex: 2 }}>
+              <span style={{ position: "relative", zIndex: 2 }}>
                 {getSaveButtonText()}
               </span>
             </button>
@@ -794,36 +800,56 @@ const KintaiForm: React.FC = () => {
           )}
         </div>
       </div>
-      
+
       {/* 削除確認モーダル */}
       {showDeleteModal && (
-        <div className="modal-overlay" style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000
-        }}>
-          <div className="modal-content" style={{
-            backgroundColor: "white",
-            padding: "24px",
-            borderRadius: "8px",
-            maxWidth: "400px",
-            width: "90%",
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)"
-          }}>
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: "600" }}>
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            className="modal-content"
+            style={{
+              backgroundColor: "white",
+              padding: "24px",
+              borderRadius: "8px",
+              maxWidth: "400px",
+              width: "90%",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+            }}
+          >
+            <h3
+              style={{
+                margin: "0 0 16px 0",
+                fontSize: "18px",
+                fontWeight: "600",
+              }}
+            >
               データを削除しますか？
             </h3>
-            <p style={{ margin: "0 0 24px 0", color: "#666", lineHeight: "1.5" }}>
+            <p
+              style={{ margin: "0 0 24px 0", color: "#666", lineHeight: "1.5" }}
+            >
               出勤時間、休憩時間、退勤時間、勤務場所のデータが削除されます。
             </p>
-            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "flex-end",
+              }}
+            >
               <button
                 className="btn"
                 onClick={handleDeleteCancel}
@@ -833,7 +859,7 @@ const KintaiForm: React.FC = () => {
                   padding: "8px 16px",
                   border: "none",
                   borderRadius: "4px",
-                  cursor: "pointer"
+                  cursor: "pointer",
                 }}
               >
                 キャンセル
@@ -847,7 +873,7 @@ const KintaiForm: React.FC = () => {
                   padding: "8px 16px",
                   border: "none",
                   borderRadius: "4px",
-                  cursor: "pointer"
+                  cursor: "pointer",
                 }}
               >
                 削除する

@@ -5,7 +5,7 @@
 */
 
 /* 長押し用スタイルのインポート */
-@import './styles/long-press.css';
+@import "./styles/long-press.css";
 :root {
   --primary-color: #3d5afe;
   --header-color: #303f9f;
@@ -90,6 +90,82 @@ body {
   position: sticky;
   top: 0;
   z-index: 1000;
+}
+
+/* 成功メッセージスタイル */
+.success-message-container {
+  margin: 20px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.success-message {
+  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 300px;
+  animation: slideInUp 0.5s ease-out;
+}
+
+.success-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+  animation: checkmark 0.6s ease-in-out;
+}
+
+.success-text {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 15px;
+  line-height: 1.4;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkmark {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* バージョン互換性警告 */
