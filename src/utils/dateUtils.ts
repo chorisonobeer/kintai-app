@@ -84,7 +84,7 @@ export const isDateInValidRange = (dateString: string): boolean => {
   const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
 
   // 2日前から当日（0以上2以下）
-  return diffDays >= 0 && diffDays <= 2;
+  return diffDays >= 0 && diffDays <= 20;
 };
 
 /**
