@@ -1,8 +1,11 @@
 /**
- * src/utils/dateUtils.ts
+ * /src/utils/dateUtils.ts
  * 2025-05-04T22:00+09:00
- * 変更概要: 更新 - 日付ユーティリティ関数の強化、日付選択肢取得関数の最適化
+ * 変更概要: 編集可能日数を単一定数で管理するように最適化
  */
+
+// 編集可能日数の設定（この値を変更するだけで全体の動作が変わります）
+export const EDITABLE_DAYS = 20;
 
 /**
  * 日付をYYYY-MM-DD形式にフォーマットする
@@ -33,21 +36,14 @@ export const formatShortDate = (dateString: string): string => {
 };
 
 /**
- * 指定された日付が20日以上前かどうかをチェックする
+ * 指定された日付が編集可能日数を超えて古いかどうかをチェックする
  */
-export const isDateTooOld = (dateString: string): boolean => {
-  const selectedDate = new Date(dateString);
+export const isDateTooOld = (date: string): boolean => {
+  const targetDate = new Date(date);
   const today = new Date();
-
-  // 時間部分をリセットして日付だけを比較
-  today.setHours(0, 0, 0, 0);
-  selectedDate.setHours(0, 0, 0, 0);
-
-  // 日付の差を計算（ミリ秒→日）
-  const timeDiff = today.getTime() - selectedDate.getTime();
-  const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
-
-  return diffDays > 20;
+  const diffTime = today.getTime() - targetDate.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays > EDITABLE_DAYS;
 };
 
 /**
@@ -69,22 +65,15 @@ export const parseTimeStringToMinutes = (timeString: string): number => {
 
 /**
  * 日付が許容範囲内かどうかチェックする
- * 現在より2日前から当日までが有効
+ * 現在より編集可能日数前から当日までが有効
  */
-export const isDateInValidRange = (dateString: string): boolean => {
-  const selectedDate = new Date(dateString);
+export const isDateInValidRange = (date: string): boolean => {
+  const targetDate = new Date(date);
   const today = new Date();
-
-  // 時間部分をリセットして日付だけを比較
-  today.setHours(0, 0, 0, 0);
-  selectedDate.setHours(0, 0, 0, 0);
-
-  // 日付の差を計算（ミリ秒→日）
-  const timeDiff = today.getTime() - selectedDate.getTime();
-  const diffDays = Math.floor(timeDiff / (1000 * 3600 * 24));
-
-  // 2日前から当日（0以上2以下）
-  return diffDays >= 0 && diffDays <= 20;
+  const limitDate = new Date(today);
+  limitDate.setDate(today.getDate() - EDITABLE_DAYS);
+  
+  return targetDate >= limitDate && targetDate <= today;
 };
 
 /**
@@ -113,25 +102,26 @@ export const getWeekdayName = (dateString: string): string => {
 };
 
 /**
- * 選択可能な日付の配列を取得する（今日から2日前まで）
+ * 選択可能な日付のリストを生成する
  * 日付選択コンポーネント用のラベル付きオブジェクトを返す
  */
 export const getSelectableDates = (): { value: string; label: string }[] => {
-  const today = new Date();
   const dates = [];
-
-  for (let i = 0; i <= 2; i += 1) {
-    const date = new Date();
+  const today = new Date();
+  
+  // 今日からEDITABLE_DAYS日前まで
+  for (let i = 0; i <= EDITABLE_DAYS; i++) {
+    const date = new Date(today);
     date.setDate(today.getDate() - i);
     const dateString = formatDate(date);
     const formattedDate = formatDateWithWeekday(dateString);
-
+    
     dates.push({
       value: dateString,
       label: formattedDate,
     });
   }
-
+  
   // 日付を昇順（過去から現在へ）にソートして返す
   return dates.reverse();
 };

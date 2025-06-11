@@ -26,6 +26,7 @@ import {
   isDateTooOld,
   isTimeBeforeOrEqual,
   getSelectableDates,
+  EDITABLE_DAYS,
 } from "../utils/dateUtils";
 import { saveKintaiToServer, isAuthenticated } from "../utils/apiService";
 import { useKintai } from "../contexts/KintaiContext";
@@ -580,7 +581,7 @@ const KintaiForm: React.FC = () => {
   // ボタンのテキストを取得
   const getSaveButtonText = (): string => {
     if (isVeryOldDate()) {
-      return "編集不可（3日以上前）";
+      return `編集不可（${EDITABLE_DAYS}日以上前）`;
     }
     return "入力済み 長押しで編集";
   };
@@ -624,7 +625,7 @@ const KintaiForm: React.FC = () => {
         {/* 古い日付の警告 */}
         {tooOldDateWarning && (
           <div className="warning-message">
-            ⚠️ 3日以上前の日付は編集できません
+            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません
           </div>
         )}
 
