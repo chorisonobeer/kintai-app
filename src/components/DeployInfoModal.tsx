@@ -13,19 +13,22 @@ interface DeployInfoModalProps {
 const DeployInfoModal: React.FC<DeployInfoModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  // デプロイ日時の取得（ビルド時に環境変数から設定される想定）
-  const deployTime = import.meta.env.VITE_DEPLOY_TIME || new Date().toISOString();
+  // デプロイ情報の取得（ビルド時に環境変数から設定される想定）
   const buildTime = import.meta.env.VITE_BUILD_TIME || new Date().toISOString();
   const gitCommit = import.meta.env.VITE_GIT_COMMIT || 'unknown';
   const gitBranch = import.meta.env.VITE_GIT_BRANCH || 'unknown';
+  const deployUrl = import.meta.env.VITE_DEPLOY_URL || 'unknown';
+  // const deployPrimeUrl = import.meta.env.VITE_DEPLOY_PRIME_URL || 'unknown';
+  const context = import.meta.env.VITE_CONTEXT || 'unknown';
+  const appVersion = import.meta.env.VITE_APP_VERSION || 'v0.1.0';
   
   // 現在時刻
   const currentTime = new Date().toISOString();
   
-  // デプロイからの経過時間を計算
-  const deployDate = new Date(deployTime);
+  // ビルドからの経過時間を計算
+  const buildDate = new Date(buildTime);
   const now = new Date();
-  const diffMs = now.getTime() - deployDate.getTime();
+  const diffMs = now.getTime() - buildDate.getTime();
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
@@ -85,18 +88,10 @@ const DeployInfoModal: React.FC<DeployInfoModalProps> = ({ isOpen, onClose }) =>
         <div className="modal-body">
           <div className="deploy-info" style={{ fontSize: '14px', lineHeight: '1.6' }}>
             <div className="info-item" style={{ marginBottom: '12px' }}>
-              <strong style={{ color: '#2563eb' }}>デプロイ日時:</strong>
+              <strong style={{ color: '#2563eb' }}>デプロイコンテキスト:</strong>
               <br />
               <span style={{ fontFamily: 'monospace', fontSize: '13px' }}>
-                {new Date(deployTime).toLocaleString('ja-JP', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                  timeZone: 'Asia/Tokyo',
-                })}
+                {context}
               </span>
             </div>
             
@@ -133,10 +128,18 @@ const DeployInfoModal: React.FC<DeployInfoModalProps> = ({ isOpen, onClose }) =>
             </div>
             
             <div className="info-item" style={{ marginBottom: '12px' }}>
-              <strong style={{ color: '#2563eb' }}>デプロイからの経過時間:</strong>
+              <strong style={{ color: '#2563eb' }}>ビルドからの経過時間:</strong>
               <br />
               <span style={{ color: '#059669' }}>
                 {diffHours > 0 ? `${diffHours}時間 ` : ''}{diffMinutes}分
+              </span>
+            </div>
+            
+            <div className="info-item" style={{ marginBottom: '12px' }}>
+              <strong style={{ color: '#2563eb' }}>デプロイURL:</strong>
+              <br />
+              <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#6b7280' }}>
+                {deployUrl !== 'unknown' ? deployUrl : 'ローカル開発環境'}
               </span>
             </div>
             
@@ -160,7 +163,7 @@ const DeployInfoModal: React.FC<DeployInfoModalProps> = ({ isOpen, onClose }) =>
               <strong style={{ color: '#2563eb' }}>アプリバージョン:</strong>
               <br />
               <span style={{ fontFamily: 'monospace', fontSize: '13px' }}>
-                v0.1.0
+                {appVersion}
               </span>
             </div>
             
