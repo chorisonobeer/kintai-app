@@ -1,4 +1,7 @@
 const CACHE_NAME = 'kintai-app-v1';
+const VERSION_CHECK_INTERVAL = 30000; // 30秒ごとにバージョンチェック
+let lastVersionCheck = 0;
+
 const urlsToCache = [
   '/',
   '/index.html',
@@ -22,10 +25,94 @@ self.addEventListener('install', (event) => {
   );
 });
 
+// バージョンチェック関数
+async function checkForUpdates() {
+  try {
+    const now = Date.now();
+    if (now - lastVersionCheck < VERSION_CHECK_INTERVAL) {
+      return false;
+    }
+    
+    lastVersionCheck = now;
+    const response = await fetch('/version.json?t=' + now, {
+      cache: 'no-cache',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const versionData = await response.json();
+    const storedVersion = await caches.match('/version.json');
+    
+    if (!storedVersion) {
+      // 初回の場合はバージョン情報をキャッシュに保存
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put('/version.json', response.clone());
+      return false;
+    }
+    
+    const storedVersionData = await storedVersion.json();
+    
+    // ビルド時間が異なる場合は新しいバージョンが利用可能
+    if (versionData.buildTime !== storedVersionData.buildTime) {
+      console.log('New version detected, clearing cache');
+      
+      // 全キャッシュを削除
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+      
+      // クライアントに更新を通知
+      const clients = await self.clients.matchAll();
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'NEW_VERSION_AVAILABLE',
+          version: versionData
+        });
+      });
+      
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Version check failed:', error);
+    return false;
+  }
+}
+
 // フェッチ時のキャッシュ戦略
 self.addEventListener('fetch', (event) => {
   // chrome-extension や unsupported スキームをスキップ
   if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // HTMLリクエストの場合はバージョンチェックを実行
+  if (event.request.destination === 'document') {
+    event.respondWith(
+      (async () => {
+        // バージョンチェックを実行
+        const hasUpdate = await checkForUpdates();
+        
+        if (hasUpdate) {
+          // 新しいバージョンが利用可能な場合はネットワークから取得
+          return fetch(event.request);
+        }
+        
+        // 通常のキャッシュ戦略
+        const cachedResponse = await caches.match(event.request);
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        
+        return fetch(event.request);
+      })()
+    );
     return;
   }
 

@@ -9,7 +9,7 @@
   VITE_DEPLOY_URL = "$DEPLOY_URL"
   VITE_DEPLOY_PRIME_URL = "$DEPLOY_PRIME_URL"
   VITE_CONTEXT = "$CONTEXT"
-  VITE_APP_VERSION = "1.0.0"
+
 
 [dev]
   command    = "npm run dev"   # ← ご自身の Vite 起動コマンド
@@ -23,21 +23,54 @@
 [[headers]]
   for = "/index.html"
   [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
-    Pragma        = "no-cache"
-    Expires       = "0"
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+    ETag = "off"
+    Last-Modified = "off"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.example.com;"
+
+[[headers]]
+  for = "/version.json"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+    ETag = "off"
+    Last-Modified = "off"
+    Access-Control-Allow-Origin = "*"
+    Content-Type = "application/json"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+    ETag = "off"
+    Content-Type = "application/javascript"
 
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+    X-Content-Type-Options = "nosniff"
 
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options      = "DENY"
+    Cache-Control = "no-cache, no-store, must-revalidate, max-age=0"
+    Pragma = "no-cache"
+    Expires = "0"
+    ETag = "off"
+    X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
-    Referrer-Policy        = "strict-origin-when-cross-origin"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
 
 [[redirects]]
   from   = "/*"
