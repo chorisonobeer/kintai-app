@@ -72,7 +72,7 @@ export const isDateInValidRange = (date: string): boolean => {
   const today = new Date();
   const limitDate = new Date(today);
   limitDate.setDate(today.getDate() - EDITABLE_DAYS);
-  
+
   return targetDate >= limitDate && targetDate <= today;
 };
 
@@ -108,20 +108,20 @@ export const getWeekdayName = (dateString: string): string => {
 export const getSelectableDates = (): { value: string; label: string }[] => {
   const dates = [];
   const today = new Date();
-  
+
   // 今日からEDITABLE_DAYS日前まで
   for (let i = 0; i <= EDITABLE_DAYS; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
     const dateString = formatDate(date);
     const formattedDate = formatDateWithWeekday(dateString);
-    
+
     dates.push({
       value: dateString,
       label: formattedDate,
     });
   }
-  
+
   // 日付を昇順（過去から現在へ）にソートして返す
   return dates.reverse();
 };

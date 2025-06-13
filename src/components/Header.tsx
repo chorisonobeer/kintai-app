@@ -2,10 +2,13 @@
  * /src/components/Header.tsx
  * 2025-05-05T15:30+09:00
  * 変更概要: 新規追加 - 共通ヘッダーコンポーネント
+ * 2025-01-20T10:00+09:00
+ * 変更概要: デプロイ情報モーダル機能追加（デバッグ用）
  */
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getUserName } from "../utils/apiService";
+import DeployInfoModal from "./DeployInfoModal";
 
 interface HeaderProps {
   onLogout: () => void;
@@ -16,6 +19,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
   const userName = getUserName();
   // const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
+  const [showDeployInfoModal, setShowDeployInfoModal] = useState(false);
   // const [versionCompatibility, setVersionCompatibility] = useState<{
   //   compatible: boolean;
   //   message?: string;
@@ -124,8 +128,9 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
           onMouseLeave={handleLongPressEnd}
           onTouchStart={handleLongPressStart}
           onTouchEnd={handleLongPressEnd}
+          onClick={() => setShowDeployInfoModal(true)}
           style={{ 
-            cursor: "default", 
+            cursor: "pointer", 
             userSelect: "none",
             position: 'relative',
             overflow: 'hidden',
@@ -136,7 +141,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
             padding: '4px 8px',
             transition: isLongPressing ? 'none' : 'background-color 0.2s ease'
           }}
-          title="3秒長押しでバージョン情報を表示"
+          title="タップでデプロイ情報を表示 / 3秒長押しでバージョン情報を表示"
         >
           {/* プログレスバー */}
           {isLongPressing && (
@@ -237,6 +242,12 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
           </div>
         </div>
       )}
+
+      {/* デプロイ情報モーダル（デバッグ用） */}
+      <DeployInfoModal 
+        isOpen={showDeployInfoModal} 
+        onClose={() => setShowDeployInfoModal(false)} 
+      />
     </div>
   );
 };
