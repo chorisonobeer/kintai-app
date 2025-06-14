@@ -25,7 +25,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
   //   message?: string;
   // }>({ compatible: true });
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
-    null,
+    null
   );
   const [longPressProgress, setLongPressProgress] = useState(0);
   const [isLongPressing, setIsLongPressing] = useState(false);
@@ -68,21 +68,21 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
     setLongPressTimer(timer);
     setIsLongPressing(true);
     setLongPressProgress(0);
-    
+
     // プログレスバーのアニメーション
     const startTime = Date.now();
     const duration = 3000; // 3秒
-    
+
     const updateProgress = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min((elapsed / duration) * 100, 100);
       setLongPressProgress(progress);
-      
+
       if (progress < 100 && longPressTimer) {
         longPressIntervalRef.current = setTimeout(updateProgress, 16); // 60fps
       }
     };
-    
+
     updateProgress();
   };
 
@@ -94,7 +94,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
     }
     setIsLongPressing(false);
     setLongPressProgress(0);
-    
+
     if (longPressIntervalRef.current) {
       clearTimeout(longPressIntervalRef.current);
       longPressIntervalRef.current = null;
@@ -129,17 +129,17 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
           onTouchStart={handleLongPressStart}
           onTouchEnd={handleLongPressEnd}
           onClick={() => setShowDeployInfoModal(true)}
-          style={{ 
-            cursor: "pointer", 
+          style={{
+            cursor: "pointer",
             userSelect: "none",
-            position: 'relative',
-            overflow: 'hidden',
-            backgroundColor: isLongPressing 
-              ? `rgba(255, 255, 255, ${0.1 + (longPressProgress / 100) * 0.2})` 
-              : 'transparent',
-            borderRadius: '4px',
-            padding: '4px 8px',
-            transition: isLongPressing ? 'none' : 'background-color 0.2s ease'
+            position: "relative",
+            overflow: "hidden",
+            backgroundColor: isLongPressing
+              ? `rgba(255, 255, 255, ${0.1 + (longPressProgress / 100) * 0.2})`
+              : "transparent",
+            borderRadius: "4px",
+            padding: "4px 8px",
+            transition: isLongPressing ? "none" : "background-color 0.2s ease",
           }}
           title="タップでデプロイ情報を表示 / 3秒長押しでバージョン情報を表示"
         >
@@ -147,21 +147,20 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
           {isLongPressing && (
             <div
               style={{
-                position: 'absolute',
+                position: "absolute",
                 top: 0,
                 left: 0,
-                height: '100%',
+                height: "100%",
                 width: `${longPressProgress}%`,
-                background: 'linear-gradient(90deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.4) 100%)',
-                transition: 'none',
-                pointerEvents: 'none',
-                zIndex: 1
+                background:
+                  "linear-gradient(90deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.4) 100%)",
+                transition: "none",
+                pointerEvents: "none",
+                zIndex: 1,
               }}
             />
           )}
-          <span style={{ position: 'relative', zIndex: 2 }}>
-            勤怠管理
-          </span>
+          <span style={{ position: "relative", zIndex: 2 }}>勤怠管理</span>
         </h1>
         <div className="header-right">
           <button className="logout-button" onClick={onLogout}>
@@ -244,9 +243,9 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
       )}
 
       {/* デプロイ情報モーダル（デバッグ用） */}
-      <DeployInfoModal 
-        isOpen={showDeployInfoModal} 
-        onClose={() => setShowDeployInfoModal(false)} 
+      <DeployInfoModal
+        isOpen={showDeployInfoModal}
+        onClose={() => setShowDeployInfoModal(false)}
       />
     </div>
   );

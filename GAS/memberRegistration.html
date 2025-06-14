@@ -23,7 +23,7 @@
       font-weight: bold;
       color: #333;
     }
-    input[type="text"], input[type="email"], input[type="number"], textarea {
+    input[type="text"], input[type="email"], input[type="number"], textarea, select {
       width: 100%;
       padding: 8px 12px;
       border: 1px solid #ddd;
@@ -140,6 +140,27 @@
         <input type="number" id="hourlyWage" name="hourlyWage" min="0">
       </div>
       
+      <div class="form-group">
+        <label for="classification">分類:</label>
+        <select id="classification" name="classification" required>
+          <option value="">選択してください</option>
+          <option value="甲">甲</option>
+          <option value="乙">乙</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="dependents">扶養人数:</label>
+        <input type="number" id="dependents" name="dependents" min="0" value="0">
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="isForeigner" name="isForeigner">
+          外国人
+        </label>
+      </div>
+      
       <div class="button-group">
         <button type="submit" class="btn-primary">登録</button>
         <button type="button" class="btn-secondary" onclick="google.script.host.close()">キャンセル</button>
@@ -169,7 +190,10 @@
         phone: document.getElementById('phone').value,
         email: document.getElementById('email').value,
         address: document.getElementById('address').value,
-        hourlyWage: parseInt(document.getElementById('hourlyWage').value) || 0
+        hourlyWage: parseInt(document.getElementById('hourlyWage').value) || 0,
+        classification: document.getElementById('classification').value,
+        dependents: parseInt(document.getElementById('dependents').value) || 0,
+        isForeigner: document.getElementById('isForeigner').checked
       };
       
       // バリデーション

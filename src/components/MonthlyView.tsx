@@ -223,7 +223,7 @@ const MonthlyView: React.FC = () => {
    * 数値（分）、文字列（HH:mm）、undefined/null に対応
    */
   const formatBreakTime = (
-    breakTime: number | string | undefined | null,
+    breakTime: number | string | undefined | null
   ): string => {
     // undefinedやnullの場合は空文字を返す
     if (breakTime === undefined || breakTime === null) return "";
@@ -343,6 +343,14 @@ const MonthlyView: React.FC = () => {
     return dateA.localeCompare(dateB);
   });
 
+  // 実際の勤務日数の計算（勤務時間が0ではない日をカウント）
+  const calculateWorkingDays = (): number => {
+    return monthlyData.filter((record) => {
+      const minutes = getMinutesFromWorkTime(record.workingTime);
+      return minutes > 0;
+    }).length;
+  };
+
   // 総勤務時間の計算（修正版 - 分単位で計算後、時:分形式で表示）
   const calculateTotalHours = (): string => {
     const totalMinutes = monthlyData.reduce((total, record) => {
@@ -393,11 +401,11 @@ const MonthlyView: React.FC = () => {
       <div className="monthly-summary">
         <div>
           勤務日数:{" "}
-          <span className="summary-value">{monthlyData.length}日</span>
+          <span className="summary-value">{calculateWorkingDays()}日</span>
         </div>
         <div>
           総勤務時間:{" "}
-          <span className="summary-value">{calculateTotalHours()}時間</span>
+          <span className="summary-value">{calculateTotalHours()}</span>
         </div>
       </div>
 
