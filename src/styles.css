@@ -804,6 +804,36 @@ body {
   font-style: italic;
 }
 
+/* プルダウンリストのoption要素の背景色を白に固定 */
+.location-input-enabled option,
+.time-input-enabled option {
+  background-color: white !important;
+  color: var(--text-primary) !important;
+}
+
+.location-input-enabled option:hover,
+.time-input-enabled option:hover {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+}
+
+/* 未入力項目の背景色スタイル */
+.input-empty {
+  background-color: #fce4ec !important; /* 薄いピンク */
+}
+
+.time-input-enabled.input-empty {
+  background-color: #fce4ec !important;
+}
+
+.location-input-enabled.input-empty {
+  background-color: #fce4ec !important;
+}
+
+.custom-datepicker-input.input-empty {
+  background-color: #fce4ec !important;
+}
+
 .react-datepicker-wrapper {
   width: 100%;
 }

@@ -442,11 +442,23 @@ const KintaiForm: React.FC = () => {
 
   const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLocation(e.target.value);
+    validateForm({
+      date: formState.date,
+      startTime,
+      breakTime,
+      endTime,
+      location: e.target.value,
+    });
   };
 
   // フォーム検証
   const validateForm = (data: KintaiData): boolean => {
     const newErrors: ValidationErrors = {};
+
+    // 勤務場所の必須チェック
+    if (!data.location || data.location.trim() === "") {
+      newErrors.location = "勤務場所を選択してください";
+    }
 
     // 出勤時間が退勤時間より前かチェック
     if (!isTimeBeforeOrEqual(data.startTime, data.endTime)) {
@@ -691,7 +703,7 @@ const KintaiForm: React.FC = () => {
               (formState.isSaved && !formState.isEditing) ||
               isVeryOldDate()
             }
-            className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""}`}
+            className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""} ${!location || location === "" ? "input-empty" : ""}`}
           >
             <option value="">未選択</option>
             <option value="田んぼ">田んぼ</option>
@@ -700,6 +712,9 @@ const KintaiForm: React.FC = () => {
             <option value="その他">その他</option>
           </select>
         </div>
+        {errors.location && (
+          <div className="error-message">{errors.location}</div>
+        )}
 
         {/* エラーメッセージ */}
         {errors.general && (

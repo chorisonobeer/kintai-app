@@ -42,7 +42,7 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
             value === undefined || value === null || value === "" ? "" : value
           }
           onChange={handleSelectChange}
-          className={`custom-datepicker-input ${disabled ? "time-input-disabled" : "time-input-enabled"}`}
+          className={`custom-datepicker-input ${disabled ? "time-input-disabled" : "time-input-enabled"} ${!value || value === "" ? "input-empty" : ""}`}
           disabled={disabled}
         >
           <option value="">未入力</option>
