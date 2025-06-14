@@ -62,18 +62,43 @@ async function checkForUpdates() {
     if (versionData.buildTime !== storedVersionData.buildTime) {
       console.log('New version detected, clearing cache');
       
+      // クライアントに更新開始を通知
+      const clients = await self.clients.matchAll();
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'VERSION_UPDATE_START'
+        });
+      });
+      
+      // プログレス更新（25%）
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'VERSION_UPDATE_PROGRESS',
+          progress: 25
+        });
+      });
+      
       // 全キャッシュを削除
       const cacheNames = await caches.keys();
       await Promise.all(cacheNames.map(name => caches.delete(name)));
       
-      // クライアントに更新を通知
-      const clients = await self.clients.matchAll();
+      // プログレス更新（75%）
       clients.forEach(client => {
         client.postMessage({
-          type: 'NEW_VERSION_AVAILABLE',
-          version: versionData
+          type: 'VERSION_UPDATE_PROGRESS',
+          progress: 75
         });
       });
+      
+      // 少し待ってから完了通知
+      setTimeout(() => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'NEW_VERSION_AVAILABLE',
+            version: versionData
+          });
+        });
+      }, 200);
       
       return true;
     }

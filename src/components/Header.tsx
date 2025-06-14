@@ -12,9 +12,11 @@ import DeployInfoModal from "./DeployInfoModal";
 
 interface HeaderProps {
   onLogout: () => void;
+  versionUpdateProgress?: number;
+  isVersionUpdating?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, isVersionUpdating = false }) => {
   const location = useLocation();
   const userName = getUserName();
   // const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
@@ -112,6 +114,16 @@ const Header: React.FC<HeaderProps> = ({ onLogout }) => {
 
   return (
     <div className="app-header">
+      {/* バージョン更新プログレスバー */}
+      {isVersionUpdating && (
+        <div className="version-update-progress-bar">
+          <div 
+            className="version-update-progress-fill"
+            style={{ width: `${versionUpdateProgress}%` }}
+          />
+        </div>
+      )}
+      
       {/* バージョン互換性警告 */}
       {/* {!versionCompatibility.compatible && (
         <div className="version-warning">⚠️ {versionCompatibility.message}</div>

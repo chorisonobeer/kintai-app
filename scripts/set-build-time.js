@@ -17,5 +17,21 @@ const envContent = `VITE_BUILD_TIME=${buildTime}\n`;
 const envPath = path.join(__dirname, '..', '.env.build');
 
 fs.writeFileSync(envPath, envContent);
+
+// version.jsonファイルのパス
+const versionJsonPath = path.join(__dirname, '..', 'public', 'version.json');
+
+// version.jsonの内容を作成
+const versionData = {
+  buildTime: buildTime,
+  version: "1.0.0",
+  lastUpdated: buildTime
+};
+
+// version.jsonファイルに書き込み
+fs.writeFileSync(versionJsonPath, JSON.stringify(versionData, null, 2));
+
 console.log(`Build time set to: ${buildTime}`);
 console.log(`Environment file created at: ${envPath}`);
+console.log(`Version JSON written to: ${versionJsonPath}`);
+console.log(`Version data:`, versionData);

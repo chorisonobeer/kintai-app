@@ -1,9 +1,9 @@
 /**
  * /src/App.tsx
- * 2025-05-05T15:30+09:00
- * 変更概要: 更新 - 共通ヘッダーコンポーネントの追加、レイアウト統一
+ * 2025-06-14T10:30+09:00
+ * 変更概要: バージョン更新プログレスバー機能追加
  */
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import KintaiForm from "./components/KintaiForm";
 import Login from "./components/Login";
@@ -18,6 +18,10 @@ const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) =>
   isAuthenticated() ? <>{element}</> : <Navigate to="/login" replace />;
 
 const App: React.FC = () => {
+  // バージョン更新プログレスバーの状態管理
+  const [versionUpdateProgress, setVersionUpdateProgress] = useState(0);
+  const [isVersionUpdating, setIsVersionUpdating] = useState(false);
+
   // アプリ起動時にlocalStorageの整合性をチェック
   useEffect(() => {
     // アプリ起動時チェック
@@ -40,7 +44,7 @@ const App: React.FC = () => {
         // Service Workerからのメッセージを受信
         navigator.serviceWorker.addEventListener(
           "message",
-          handleServiceWorkerMessage,
+          handleServiceWorkerMessage
         );
 
         // 認証済みユーザーの場合、バックグラウンド同期を開始
@@ -57,7 +61,7 @@ const App: React.FC = () => {
 
   // バックグラウンド同期初期化
   const initializeBackgroundSync = async (
-    registration: ServiceWorkerRegistration,
+    registration: ServiceWorkerRegistration
   ) => {
     try {
       // BackgroundSyncManagerを開始
@@ -94,8 +98,30 @@ const App: React.FC = () => {
         }
         break;
 
+      case "VERSION_UPDATE_START":
+        // バージョン更新開始
+        setIsVersionUpdating(true);
+        setVersionUpdateProgress(0);
+        break;
+
+      case "VERSION_UPDATE_PROGRESS":
+        // バージョン更新進行状況
+        const { progress } = event.data;
+        setVersionUpdateProgress(progress || 0);
+        break;
+
+      case "NEW_VERSION_AVAILABLE":
+        // 新バージョン検出時の自動リロード
+        console.log("新バージョンが利用可能です。自動的にリロードします。");
+        // プログレスバーを100%にしてから少し待ってリロード
+        setVersionUpdateProgress(100);
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+        break;
+
       default:
-        // 未知のService Workerメッセージ
+      // 未知のService Workerメッセージ
     }
   };
 
@@ -125,7 +151,11 @@ const App: React.FC = () => {
                 <ProtectedRoute
                   element={
                     <>
-                      <Header onLogout={handleLogout} />
+                      <Header 
+                        onLogout={handleLogout} 
+                        versionUpdateProgress={versionUpdateProgress}
+                        isVersionUpdating={isVersionUpdating}
+                      />
                       <KintaiForm />
                     </>
                   }
@@ -138,7 +168,11 @@ const App: React.FC = () => {
                 <ProtectedRoute
                   element={
                     <>
-                      <Header onLogout={handleLogout} />
+                      <Header 
+                        onLogout={handleLogout} 
+                        versionUpdateProgress={versionUpdateProgress}
+                        isVersionUpdating={isVersionUpdating}
+                      />
                       <MonthlyView />
                     </>
                   }
