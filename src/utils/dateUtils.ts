@@ -5,7 +5,7 @@
  */
 
 // 編集可能日数の設定（この値を変更するだけで全体の動作が変わります）
-export const EDITABLE_DAYS = 20;
+export const EDITABLE_DAYS = 200;
 
 /**
  * 日付をYYYY-MM-DD形式にフォーマットする

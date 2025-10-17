@@ -92,24 +92,6 @@ body {
   z-index: 1000;
 }
 
-/* バージョン更新プログレスバー */
-.version-update-progress-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background-color: rgba(255, 255, 255, 0.2);
-  z-index: 1001;
-}
-
-.version-update-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4caf50 0%, #8bc34a 50%, #cddc39 100%);
-  transition: width 0.3s ease;
-  box-shadow: 0 0 3px rgba(76, 175, 80, 0.6);
-}
-
 /* バージョン互換性警告 */
 .version-warning {
   background: #ff6b6b;

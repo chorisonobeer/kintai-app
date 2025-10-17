@@ -1,6 +1,5 @@
 const CACHE_NAME = 'kintai-app-v1';
-const VERSION_CHECK_INTERVAL = 30000; // 30秒ごとにバージョンチェック
-let lastVersionCheck = 0;
+// バージョン自動チェック間隔は無効化しました
 
 const urlsToCache = [
   '/',
@@ -26,14 +25,15 @@ self.addEventListener('install', (event) => {
 });
 
 // バージョンチェック関数
+// バージョンチェックは起動時に一度のみ実施
+let hasVersionChecked = false;
 async function checkForUpdates() {
   try {
-    const now = Date.now();
-    if (now - lastVersionCheck < VERSION_CHECK_INTERVAL) {
+    // バージョンチェック頻度制御を削除し、初回のみ実行
+    if (hasVersionChecked) {
       return false;
     }
-    
-    lastVersionCheck = now;
+    const now = Date.now();
     const response = await fetch('/version.json?t=' + now, {
       cache: 'no-cache',
       headers: {
@@ -47,6 +47,7 @@ async function checkForUpdates() {
     }
     
     const versionData = await response.json();
+    hasVersionChecked = true;
     const storedVersion = await caches.match('/version.json');
     
     if (!storedVersion) {
@@ -62,43 +63,18 @@ async function checkForUpdates() {
     if (versionData.buildTime !== storedVersionData.buildTime) {
       console.log('New version detected, clearing cache');
       
-      // クライアントに更新開始を通知
-      const clients = await self.clients.matchAll();
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'VERSION_UPDATE_START'
-        });
-      });
-      
-      // プログレス更新（25%）
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'VERSION_UPDATE_PROGRESS',
-          progress: 25
-        });
-      });
-      
       // 全キャッシュを削除
       const cacheNames = await caches.keys();
       await Promise.all(cacheNames.map(name => caches.delete(name)));
       
-      // プログレス更新（75%）
+      // クライアントに更新を通知
+      const clients = await self.clients.matchAll();
       clients.forEach(client => {
         client.postMessage({
-          type: 'VERSION_UPDATE_PROGRESS',
-          progress: 75
+          type: 'NEW_VERSION_AVAILABLE',
+          version: versionData
         });
       });
-      
-      // 少し待ってから完了通知
-      setTimeout(() => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'NEW_VERSION_AVAILABLE',
-            version: versionData
-          });
-        });
-      }, 200);
       
       return true;
     }

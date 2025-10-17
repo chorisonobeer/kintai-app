@@ -565,6 +565,14 @@ const syncPendingData = async () => {
 - **匿名化**: 統計データの匿名化
 - **削除権**: ユーザーによるデータ削除要求対応
 
+### 関連仕様（編集可能期間）
+
+- 制御定義: `src/utils/dateUtils.ts` の `EDITABLE_DAYS = 20` により、利用者の入力可能期間は「当日を含む過去20日」へ統一管理されています。
+- 判定関数: `isDateTooOld(date)`, `isDateInValidRange(date)` を各処理で参照。
+- UI反映: `src/components/KintaiForm.tsx` が `isDateTooOld(formState.date)` に基づき保存ボタンを無効化し、文言を「編集不可（20日以上前）」へ切替。
+- 日付選択: `getSelectableDates()` は「過去20日〜当日」の候補を生成。`MobileDatePicker.tsx` は日付選択そのものを担い、編集可否は `KintaiForm` 側で制御。
+- 変更手順: 期間の見直しは `EDITABLE_DAYS` の値変更のみで全体へ反映。
+
 ---
 
 **最終更新**: 2025-01-27  

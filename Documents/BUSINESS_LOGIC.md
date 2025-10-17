@@ -468,6 +468,13 @@ export const getSelectableDates = (): SelectableDate[] => {
 };
 ```
 
+### UI連動箇所
+
+- `src/utils/dateUtils.ts`: `EDITABLE_DAYS` 定数、`isDateTooOld`、`isDateInValidRange`、`getSelectableDates` が中心的に制御。
+- `src/components/KintaiForm.tsx`: `isDateTooOld(formState.date)` の判定結果で保存ボタンのクラス/文言を切り替え（20日超過で「編集不可」表示）。`getSelectableDates()` を取得して日付選択に使用。
+- `src/components/MobileDatePicker.tsx`: 現在の実装では `selectableDates` を直接は使用せず、任意の日付選択を許容。編集可否自体は `KintaiForm` 側で制御。
+- 仕様変更方法: `src/utils/dateUtils.ts` の `EDITABLE_DAYS` を変更すれば、許容期間がアプリ全体に一括反映される。
+
 ### 権限管理
 
 ```typescript
