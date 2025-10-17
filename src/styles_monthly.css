@@ -152,10 +152,12 @@
 }
 
 .month-nav-button {
-  background: none;
+  background: #e9e9e9;
   border: none;
-  border-radius: 10%;
-  width: var(--button-min-width) + 40px;
+  border-radius: 8px;
+  /* 横方向のタップ領域を拡大 */
+  padding: 0 12px;
+  min-width: var(--button-min-width);
   height: var(--button-min-height);
   display: flex;
   align-items: center;
@@ -169,7 +171,7 @@
 }
 
 .month-nav-button:active {
-  background-color: var(--background-gray);
+  background-color: #e9e9e9; /* 薄いグレーで押下時のフィードバック */
 }
 
 .refresh-button {
@@ -237,7 +239,7 @@
 }
 
 .data-table th {
-  background-color: var(--background-gray);
+  background-color: #e9e9e9;
   font-weight: 500;
   color: var(--text-secondary);
   position: sticky;
