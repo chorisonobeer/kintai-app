@@ -14,18 +14,9 @@ const isStandaloneDisplay = () => {
   return mq || iosStandalone;
 };
 
-// 前回の抑止から24時間経過したか
+// 前回の抑止から24時間経過したか（抑止廃止のため常にtrue）
 const canShowAfterDismiss = () => {
-  try {
-    const ts = localStorage.getItem(DISMISS_KEY);
-    if (!ts) return true;
-    const last = Number(ts);
-    if (Number.isNaN(last)) return true;
-    const diffMs = Date.now() - last;
-    return diffMs >= 24 * 60 * 60 * 1000; // 24h
-  } catch {
-    return true;
-  }
+  return true;
 };
 
 const getIconUrl = () => {
@@ -71,9 +62,30 @@ const InstallPromptBanner: React.FC = () => {
       }
     }
 
-    // Chromium系: beforeinstallprompt を捕捉
+    // 先にグローバル捕捉済みイベント（index.htmlで保存）を参照
+    try {
+      const globalEvent = (window as any).__bipEvent as BeforeInstallPromptEvent | undefined;
+      if (globalEvent && !onceRef.current) {
+        setInstallEvent(globalEvent);
+        setVisible(true);
+        onceRef.current = true;
+      }
+    } catch {}
+
+    const onBipCaptured = () => {
+      try {
+        const globalEvent = (window as any).__bipEvent as BeforeInstallPromptEvent | undefined;
+        if (globalEvent && !onceRef.current) {
+          setInstallEvent(globalEvent);
+          setVisible(true);
+          onceRef.current = true;
+        }
+      } catch {}
+    };
+    window.addEventListener("bip-captured", onBipCaptured);
+
+    // Chromium系: beforeinstallprompt を捕捉（グローバル未設定時のフォールバック）
     const handler = (e: Event) => {
-      // 型を合わせる
       const bip = e as BeforeInstallPromptEvent;
       bip.preventDefault();
       setInstallEvent(bip);
@@ -85,6 +97,7 @@ const InstallPromptBanner: React.FC = () => {
     window.addEventListener("beforeinstallprompt", handler as EventListener);
 
     return () => {
+      window.removeEventListener("bip-captured", onBipCaptured);
       window.removeEventListener("beforeinstallprompt", handler as EventListener);
     };
   }, [installed]);
@@ -94,18 +107,15 @@ const InstallPromptBanner: React.FC = () => {
     if (installEvent) {
       try {
         const res = await installEvent.prompt();
-        // ユーザー選択の結果を確認
         if ((res as any)?.outcome === "accepted") {
           // 成功時は非表示（appinstalledでも非表示になる）
           setVisible(false);
         } else {
-          // キャンセル時は24時間抑止
-          try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch {}
+          // キャンセル時は一時的に非表示（24時間抑止しない）
           setVisible(false);
         }
       } catch {
-        // 失敗時も24時間抑止
-        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch {}
+        // 失敗時も一時的に非表示（24時間抑止しない）
         setVisible(false);
       }
       return;
@@ -117,13 +127,12 @@ const InstallPromptBanner: React.FC = () => {
       return;
     }
 
-    // 対応外ブラウザ: 一旦抑止
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch {}
+    // 対応外ブラウザ: 一旦非表示（抑止はしない）
     setVisible(false);
   };
 
   const handleLater = () => {
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch {}
+    // 24時間抑止は行わず、今回のみ非表示
     setVisible(false);
   };
 

@@ -67,6 +67,30 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- PWAインストール促しイベントのグローバル捕捉（最速） -->
+    <script>
+      (function() {
+        try {
+          window.__bipEvent = null;
+          // beforeinstallprompt を最速で捕捉し、React側から参照できるよう保存
+          window.addEventListener('beforeinstallprompt', function(e) {
+            try { e.preventDefault(); } catch {}
+            window.__bipEvent = e;
+            // React側に通知（InstallPromptBannerが受け取って表示制御）
+            try { window.dispatchEvent(new CustomEvent('bip-captured')); } catch {}
+          });
+
+          // インストール完了時は保存イベントをクリア
+          window.addEventListener('appinstalled', function() {
+            window.__bipEvent = null;
+          });
+        } catch (err) {
+          // 失敗時は無視
+        }
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // サービスワーカーの登録

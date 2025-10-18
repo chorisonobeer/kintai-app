@@ -1,8 +1,3 @@
-/**
- * /src/components/DrumTimePicker.tsx
- * 2025-01-20T10:00+09:00
- * 変更概要: 新規追加 - モバイルフレンドリーなドラム型時間ピッカー
- */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import "./drumtimepicker.css";
 
@@ -36,23 +31,24 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const itemHeight = 50;
+
+  const getOptionElements = () =>
+    (containerRef.current?.querySelectorAll(
+      ".drum-picker-option",
+    ) as NodeListOf<HTMLElement>) || null;
 
   const scrollToIndex = useCallback(
     (index: number, smooth = false) => {
-      if (containerRef.current) {
-        const targetScrollTop = index * itemHeight;
-        if (smooth) {
-          containerRef.current.scrollTo({
-            top: targetScrollTop,
-            behavior: "smooth",
-          });
-        } else {
-          containerRef.current.scrollTop = targetScrollTop;
-        }
-      }
+      const container = containerRef.current;
+      const optionEls = getOptionElements();
+      if (!container || !optionEls || !optionEls[index]) return;
+      const el = optionEls[index];
+      // コンテナ中央に対象要素が来るスクロール位置を算出
+      const containerCenterOffset = container.clientHeight / 2 - el.offsetHeight / 2;
+      const targetTop = el.offsetTop - containerCenterOffset;
+      container.scrollTo({ top: targetTop, behavior: smooth ? "smooth" : "auto" });
     },
-    [itemHeight],
+    [],
   );
 
   useEffect(() => {
@@ -68,34 +64,40 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
 
     setIsScrolling(true);
 
-    // Clear existing timeout
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
 
-    // Set new timeout for snap behavior
+    // スクロール終了後に中央に最も近い要素を選択
     scrollTimeoutRef.current = setTimeout(() => {
-      if (containerRef.current) {
-        const { scrollTop } = containerRef.current;
-        // Use Math.floor and add 0.5 * itemHeight for better centering
-        const index = Math.floor((scrollTop + itemHeight * 0.5) / itemHeight);
-        const clampedIndex = Math.max(0, Math.min(index, options.length - 1));
+      const container = containerRef.current;
+      const optionEls = getOptionElements();
+      if (container && optionEls && optionEls.length > 0) {
+        const containerRect = container.getBoundingClientRect();
+        const centerY = containerRect.top + containerRect.height / 2;
 
-        // Update value if changed
-        if (options[clampedIndex] !== value) {
-          onChange(options[clampedIndex]);
-        }
+        let bestIndex = 0;
+        let minDist = Number.POSITIVE_INFINITY;
+        optionEls.forEach((el, idx) => {
+          const rect = el.getBoundingClientRect();
+          const elCenterY = rect.top + rect.height / 2;
+          const dist = Math.abs(elCenterY - centerY);
+          if (dist < minDist) {
+            minDist = dist;
+            bestIndex = idx;
+          }
+        });
 
-        // Snap to position only if value actually changed
-        if (options[clampedIndex] !== value) {
-          scrollToIndex(clampedIndex, true);
+        const nextValue = options[bestIndex];
+        if (nextValue !== value) {
+          onChange(nextValue);
+          scrollToIndex(bestIndex, true);
         }
         setIsScrolling(false);
       }
     }, 150);
-  }, [disabled, itemHeight, options, value, onChange, scrollToIndex]);
+  }, [disabled, options, value, onChange, scrollToIndex]);
 
-  // Clean up timeout on unmount
   useEffect(
     () => () => {
       if (scrollTimeoutRef.current) {
