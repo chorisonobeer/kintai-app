@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// 表示抑止（24時間）に使うキー
-const DISMISS_KEY = "pwaPromptDismissedAt";
+// インストール済み判定に使うキー（抑止用キーは廃止）
 const INSTALLED_KEY = "pwaInstalled";
 
 // iOS判定（Safari/ホーム画面追加ガイド用）
