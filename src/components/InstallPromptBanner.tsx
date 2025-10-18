@@ -26,7 +26,6 @@ const getIconUrl = () => {
 
 const InstallPromptBanner: React.FC = () => {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [visible, setVisible] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const onceRef = useRef(false);
 
@@ -44,7 +43,8 @@ const InstallPromptBanner: React.FC = () => {
     // appinstalled: インストール完了時
     const handleInstalled = () => {
       try { localStorage.setItem(INSTALLED_KEY, "1"); } catch {}
-      setVisible(false);
+      setInstallEvent(null);
+      setShowIOSGuide(false);
     };
     window.addEventListener("appinstalled", handleInstalled);
     return () => window.removeEventListener("appinstalled", handleInstalled);
@@ -53,21 +53,18 @@ const InstallPromptBanner: React.FC = () => {
   useEffect(() => {
     if (installed) return; // すでにPWAなら表示不要
 
-    // iOS の場合は beforeinstallprompt が来ないため、独自ガイドを条件付き表示
+    // iOS の場合は beforeinstallprompt が来ないため、ボタンのみ表示
     if (isIOS()) {
       if (canShowAfterDismiss()) {
-        // iOSはボタンのみ表示（ガイドはボタンタップ時に表示）
         setShowIOSGuide(false);
-        setVisible(true);
       }
     }
 
-    // 先にグローバル捕捉済みイベント（index.htmlで保存）を参照
+    // グローバル捕捉済みイベント（index.htmlで保存）
     try {
       const globalEvent = (window as any).__bipEvent as BeforeInstallPromptEvent | undefined;
       if (globalEvent && !onceRef.current) {
         setInstallEvent(globalEvent);
-        setVisible(true);
         onceRef.current = true;
       }
     } catch {}
@@ -77,7 +74,6 @@ const InstallPromptBanner: React.FC = () => {
         const globalEvent = (window as any).__bipEvent as BeforeInstallPromptEvent | undefined;
         if (globalEvent && !onceRef.current) {
           setInstallEvent(globalEvent);
-          setVisible(true);
           onceRef.current = true;
         }
       } catch {}
@@ -90,7 +86,6 @@ const InstallPromptBanner: React.FC = () => {
       bip.preventDefault();
       setInstallEvent(bip);
       if (!onceRef.current && canShowAfterDismiss()) {
-        setVisible(true);
         onceRef.current = true;
       }
     };
@@ -112,12 +107,15 @@ const InstallPromptBanner: React.FC = () => {
       try {
         const res = await installEvent.prompt();
         if ((res as any)?.outcome === "accepted") {
-          setVisible(false);
+          setInstallEvent(null);
+          setShowIOSGuide(false);
         } else {
-          setVisible(false);
+          setInstallEvent(null);
+          setShowIOSGuide(false);
         }
       } catch {
-        setVisible(false);
+        setInstallEvent(null);
+        setShowIOSGuide(false);
       }
       return;
     }
@@ -127,9 +125,6 @@ const InstallPromptBanner: React.FC = () => {
       setShowIOSGuide(true);
       return;
     }
-
-    // 対応外ブラウザ: 一旦非表示
-    setVisible(false);
   };
 
   const handleLater = () => {
