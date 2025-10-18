@@ -56,7 +56,8 @@ const InstallPromptBanner: React.FC = () => {
     // iOS の場合は beforeinstallprompt が来ないため、独自ガイドを条件付き表示
     if (isIOS()) {
       if (canShowAfterDismiss()) {
-        setShowIOSGuide(true);
+        // iOSはボタンのみ表示（ガイドはボタンタップ時に表示）
+        setShowIOSGuide(false);
         setVisible(true);
       }
     }
@@ -101,6 +102,10 @@ const InstallPromptBanner: React.FC = () => {
     };
   }, [installed]);
 
+  const shouldShowButton = useMemo(() => {
+    return !installed && (isIOS() || !!installEvent);
+  }, [installed, installEvent]);
+
   const handleInstall = async () => {
     // Chromium系: キャプチャ済みイベントからインストール
     if (installEvent) {
@@ -128,92 +133,102 @@ const InstallPromptBanner: React.FC = () => {
   };
 
   const handleLater = () => {
-    // 今回のみ非表示（抑止なし）
-    setVisible(false);
+    // iOSガイドを閉じる（ボタンは残す）
+    setShowIOSGuide(false);
   };
 
-  if (!visible) return null;
+  if (!shouldShowButton && !showIOSGuide) return null;
 
-  // モーダルUI（全画面オーバーレイ）
+  // ボタン＋iOSガイド（必要時のみモーダル表示）
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="アプリをインストール"
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: "16px",
-      }}
-    >
-      <div
-        role="document"
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          background: "#fff",
-          borderRadius: 10,
-          boxShadow: "0 10px 24px rgba(0,0,0,0.2)",
-          padding: 16,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img
-            src={getIconUrl()}
-            alt="App icon"
-            style={{ width: 48, height: 48, borderRadius: 8 }}
-          />
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>アプリをホーム画面に追加できます</div>
-            {showIOSGuide ? (
-              <div style={{ fontSize: 13, color: "#444" }}>
-                Safari右上の共有ボタンから「ホーム画面に追加」を選択してください。
+    <>
+      {showIOSGuide && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="インストール手順"
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "16px",
+          }}
+        >
+          <div
+            role="document"
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "#fff",
+              borderRadius: 10,
+              boxShadow: "0 10px 24px rgba(0,0,0,0.2)",
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <img
+                src={getIconUrl()}
+                alt="App icon"
+                style={{ width: 48, height: 48, borderRadius: 8 }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>ホーム画面に追加</div>
+                <div style={{ fontSize: 13, color: "#444" }}>
+                  Safariの共有ボタンから「ホーム画面に追加」を選択してください。
+                </div>
               </div>
-            ) : (
-              <div style={{ fontSize: 13, color: "#444" }}>
-                より便利にご利用いただけます。インストールしますか？
-              </div>
-            )}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button
+                onClick={handleLater}
+                style={{
+                  fontSize: 13,
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  border: "1px solid #ccc",
+                  background: "#fff",
+                  color: "#333",
+                }}
+              >
+                閉じる
+              </button>
+            </div>
           </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-          {!showIOSGuide && (
-            <button
-              onClick={handleInstall}
-              style={{
-                fontSize: 13,
-                padding: "10px 14px",
-                borderRadius: 6,
-                border: "1px solid #303f9f",
-                background: "#303f9f",
-                color: "#fff",
-              }}
-            >
-              インストール
-            </button>
-          )}
-          <button
-            onClick={handleLater}
-            style={{
-              fontSize: 13,
-              padding: "10px 14px",
-              borderRadius: 6,
-              border: "1px solid #ccc",
-              background: "#fff",
-              color: "#333",
-            }}
-          >
-            後で
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+
+      {shouldShowButton && (
+        <button
+          onClick={handleInstall}
+          aria-label="ホーム画面に追加"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            zIndex: 999,
+            background: "#303f9f",
+            color: "#fff",
+            border: "1px solid #303f9f",
+            borderRadius: 24,
+            padding: "10px 16px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+            fontSize: 13,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+          title={installEvent ? "インストール" : "手順を表示"}
+        >
+          <span style={{ display: "inline-block", width: 18, height: 18, borderRadius: 4, background: "#fff", color: "#303f9f", fontWeight: 700, textAlign: "center", lineHeight: "18px" }}>+</span>
+          ホーム画面に追加
+        </button>
+      )}
+    </>
   );
 };
 
