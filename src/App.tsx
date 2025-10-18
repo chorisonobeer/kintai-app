@@ -9,6 +9,7 @@ import KintaiForm from "./components/KintaiForm";
 import Login from "./components/Login";
 import MonthlyView from "./components/MonthlyView";
 import Header from "./components/Header";
+import InstallPromptBanner from "./components/InstallPromptBanner";
 import { isAuthenticated, logout } from "./utils/apiService";
 import { KintaiProvider } from "./contexts/KintaiContext";
 import { backgroundSyncManager } from "./utils/backgroundSync";
@@ -156,6 +157,7 @@ const App: React.FC = () => {
                         versionUpdateProgress={versionUpdateProgress}
                         isVersionUpdating={isVersionUpdating}
                       />
+                      <InstallPromptBanner />
                       <KintaiForm />
                     </>
                   }
@@ -173,6 +175,7 @@ const App: React.FC = () => {
                         versionUpdateProgress={versionUpdateProgress}
                         isVersionUpdating={isVersionUpdating}
                       />
+                      <InstallPromptBanner />
                       <MonthlyView />
                     </>
                   }

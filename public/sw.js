@@ -1,15 +1,13 @@
-const CACHE_NAME = 'kintai-app-v1';
-// バージョン自動チェック間隔は無効化しました
+const CACHE_NAME = 'kintai-app-v2';
+// バージョン自動チェック: ドキュメント取得毎に実施
 
 const urlsToCache = [
   '/',
   '/index.html',
-  '/src/main.tsx',
-  '/src/App.tsx',
-  '/src/styles.css',
-  '/src/styles_addition.css',
-  '/src/styles_addition_final.css',
-  '/src/styles_monthly.css',
+  '/manifest.json',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+  '/version.json',
   'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap'
 ];
 
@@ -21,18 +19,17 @@ self.addEventListener('install', (event) => {
         console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
+      .catch((err) => {
+        console.warn('cache.addAll failed on install:', err);
+      })
   );
+  // 新SWをすぐに有効化
+  self.skipWaiting();
 });
 
-// バージョンチェック関数
-// バージョンチェックは起動時に一度のみ実施
-let hasVersionChecked = false;
+// バージョンチェック関数（毎回チェック）
 async function checkForUpdates() {
   try {
-    // バージョンチェック頻度制御を削除し、初回のみ実行
-    if (hasVersionChecked) {
-      return false;
-    }
     const now = Date.now();
     const response = await fetch('/version.json?t=' + now, {
       cache: 'no-cache',
@@ -41,33 +38,34 @@ async function checkForUpdates() {
         'Pragma': 'no-cache'
       }
     });
-    
+
     if (!response.ok) {
       return false;
     }
-    
+
     const versionData = await response.json();
-    hasVersionChecked = true;
     const storedVersion = await caches.match('/version.json');
-    
-    if (!storedVersion) {
-      // 初回の場合はバージョン情報をキャッシュに保存
-      const cache = await caches.open(CACHE_NAME);
-      await cache.put('/version.json', response.clone());
-      return false;
-    }
-    
-    const storedVersionData = await storedVersion.json();
-    
-    // ビルド時間が異なる場合は新しいバージョンが利用可能
-    if (versionData.buildTime !== storedVersionData.buildTime) {
+    const storedVersionData = storedVersion ? await storedVersion.json() : null;
+
+    // 初回または新バージョン検出
+    if (!storedVersion || (storedVersionData && versionData.buildTime !== storedVersionData.buildTime)) {
       console.log('New version detected, clearing cache');
-      
-      // 全キャッシュを削除
+
+      // 進捗開始通知（任意）
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'VERSION_UPDATE_START' }));
+      });
+
       const cacheNames = await caches.keys();
       await Promise.all(cacheNames.map(name => caches.delete(name)));
-      
-      // クライアントに更新を通知
+
+      // 新しいversion.jsonを保存
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put('/version.json', new Response(JSON.stringify(versionData), {
+        headers: { 'Content-Type': 'application/json' }
+      }));
+
+      // 完了通知（App側でリロード）
       const clients = await self.clients.matchAll();
       clients.forEach(client => {
         client.postMessage({
@@ -75,10 +73,10 @@ async function checkForUpdates() {
           version: versionData
         });
       });
-      
+
       return true;
     }
-    
+
     return false;
   } catch (error) {
     console.error('Version check failed:', error);
@@ -93,25 +91,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTMLリクエストの場合はバージョンチェックを実行
+  // HTMLリクエストはネットワーク優先 + バージョンチェック
   if (event.request.destination === 'document') {
     event.respondWith(
       (async () => {
-        // バージョンチェックを実行
-        const hasUpdate = await checkForUpdates();
-        
-        if (hasUpdate) {
-          // 新しいバージョンが利用可能な場合はネットワークから取得
-          return fetch(event.request);
+        await checkForUpdates();
+        try {
+          const network = await fetch(event.request, { cache: 'no-store' });
+          // 最新をキャッシュへ保存（失敗は無視）
+          const copy = network.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+          return network;
+        } catch (e) {
+          const cachedResponse = await caches.match(event.request);
+          return cachedResponse || caches.match('/index.html');
         }
-        
-        // 通常のキャッシュ戦略
-        const cachedResponse = await caches.match(event.request);
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        
-        return fetch(event.request);
       })()
     );
     return;
@@ -158,7 +152,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// アクティベート時の古いキャッシュ削除
+// アクティベート時の古いキャッシュ削除 + クライアント即制御
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -170,7 +164,7 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
