@@ -4,7 +4,7 @@
  * 変更概要: 新規追加 - モバイルフレンドリーなドラム型時間ピッカー
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import "./DrumTimePicker.css";
+import "./drumtimepicker.css";
 
 interface DrumTimePickerProps {
   label: string;
@@ -19,6 +19,13 @@ interface DrumPickerItemProps {
   onChange: (value: string) => void;
   disabled?: boolean;
 }
+
+// 安全に "HH:mm" を抽出するヘルパー（未入力は "00:00"）
+const parseHHmm = (v: string): [string, string] => {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(v || "");
+  if (!match) return ["00", "00"];
+  return [match[1].padStart(2, "0"), match[2].padStart(2, "0")];
+};
 
 const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
   options,
@@ -138,13 +145,15 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
   disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [hours, minutes] = value.split(":").map((v) => v.padStart(2, "0"));
+  const [hours, minutes] = parseHHmm(value);
 
   // Generate options
-  const hourOptions = Array.from({ length: 24 }, (_, i) =>
-    i.toString().padStart(2, "0"),
+  const hourOptions = Array.from({ length: 23 }, (_, i) =>
+    String(i + 1).padStart(2, "0"),
   );
-  const minuteOptions = ["00", "15", "30", "45"];
+  const minuteOptions = Array.from({ length: 12 }, (_, i) =>
+    String(i * 5).padStart(2, "0"),
+  );
 
   const handleHourChange = (newHour: string) => {
     const newTime = `${newHour}:${minutes}`;
@@ -170,7 +179,7 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
         onClick={() => !disabled && setIsOpen(true)}
         disabled={disabled}
       >
-        <span className="drum-time-picker-value">{value}</span>
+        <span className="drum-time-picker-value">{value || "未入力"}</span>
         <span className="drum-time-picker-icon">🕐</span>
       </button>
 
