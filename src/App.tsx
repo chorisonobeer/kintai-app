@@ -136,8 +136,8 @@ const App: React.FC = () => {
     <div className="container">
       <BrowserRouter>
         <KintaiProvider>
-+         {/* PWAインストール促しバナーを全ルートで常時マウント */}
-+         <InstallPromptBanner />
+          {/* PWAインストール促しバナーを全ルートで常時マウント */}
+          <InstallPromptBanner />
           <Routes>
             {/* ログイン画面 - ヘッダーなし */}
             <Route
@@ -159,7 +159,6 @@ const App: React.FC = () => {
                         versionUpdateProgress={versionUpdateProgress}
                         isVersionUpdating={isVersionUpdating}
                       />
--                     <InstallPromptBanner />
                       <KintaiForm />
                     </>
                   }
@@ -177,7 +176,6 @@ const App: React.FC = () => {
                         versionUpdateProgress={versionUpdateProgress}
                         isVersionUpdating={isVersionUpdating}
                       />
--                     <InstallPromptBanner />
                       <MonthlyView />
                     </>
                   }

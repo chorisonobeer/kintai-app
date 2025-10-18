@@ -20,7 +20,7 @@ const canShowAfterDismiss = () => {
 
 const getIconUrl = () => {
   // 既存のPWAアイコン。manifestにも定義済み
-  // サイズは高さ24px程度で表示（CSSで制御）
+  // サイズは高さ48px程度で表示（モーダル内で制御）
   return "/icons/icon-192x192.png";
 };
 
@@ -107,14 +107,11 @@ const InstallPromptBanner: React.FC = () => {
       try {
         const res = await installEvent.prompt();
         if ((res as any)?.outcome === "accepted") {
-          // 成功時は非表示（appinstalledでも非表示になる）
           setVisible(false);
         } else {
-          // キャンセル時は一時的に非表示（24時間抑止しない）
           setVisible(false);
         }
       } catch {
-        // 失敗時も一時的に非表示（24時間抑止しない）
         setVisible(false);
       }
       return;
@@ -126,38 +123,94 @@ const InstallPromptBanner: React.FC = () => {
       return;
     }
 
-    // 対応外ブラウザ: 一旦非表示（抑止はしない）
+    // 対応外ブラウザ: 一旦非表示
     setVisible(false);
   };
 
   const handleLater = () => {
-    // 24時間抑止は行わず、今回のみ非表示
+    // 今回のみ非表示（抑止なし）
     setVisible(false);
   };
 
   if (!visible) return null;
 
+  // モーダルUI（全画面オーバーレイ）
   return (
-    <div className="install-banner" role="dialog" aria-label="アプリをインストール">
-      <div className="install-banner__content">
-        <img src={getIconUrl()} alt="App icon" className="install-banner__icon" />
-        <div className="install-banner__text">
-          <div className="install-banner__title">アプリをホーム画面に追加できます</div>
-          {showIOSGuide ? (
-            <div className="install-banner__desc">
-              Safari右上の共有ボタンから「ホーム画面に追加」を選択してください。
-            </div>
-          ) : (
-            <div className="install-banner__desc">より便利にご利用いただけます。インストールしますか？</div>
-          )}
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="アプリをインストール"
+      style={{
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        padding: "16px",
+      }}
+    >
+      <div
+        role="document"
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          background: "#fff",
+          borderRadius: 10,
+          boxShadow: "0 10px 24px rgba(0,0,0,0.2)",
+          padding: 16,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img
+            src={getIconUrl()}
+            alt="App icon"
+            style={{ width: 48, height: 48, borderRadius: 8 }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>アプリをホーム画面に追加できます</div>
+            {showIOSGuide ? (
+              <div style={{ fontSize: 13, color: "#444" }}>
+                Safari右上の共有ボタンから「ホーム画面に追加」を選択してください。
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#444" }}>
+                より便利にご利用いただけます。インストールしますか？
+              </div>
+            )}
+          </div>
         </div>
-        <div className="install-banner__actions">
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
           {!showIOSGuide && (
-            <button className="install-banner__btn install-banner__btn-primary" onClick={handleInstall}>
+            <button
+              onClick={handleInstall}
+              style={{
+                fontSize: 13,
+                padding: "10px 14px",
+                borderRadius: 6,
+                border: "1px solid #303f9f",
+                background: "#303f9f",
+                color: "#fff",
+              }}
+            >
               インストール
             </button>
           )}
-          <button className="install-banner__btn" onClick={handleLater}>後で</button>
+          <button
+            onClick={handleLater}
+            style={{
+              fontSize: 13,
+              padding: "10px 14px",
+              borderRadius: 6,
+              border: "1px solid #ccc",
+              background: "#fff",
+              color: "#333",
+            }}
+          >
+            後で
+          </button>
         </div>
       </div>
     </div>
