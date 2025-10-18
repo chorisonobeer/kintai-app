@@ -34,22 +34,23 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
 
   const getOptionElements = () =>
     (containerRef.current?.querySelectorAll(
-      ".drum-picker-option",
+      ".drum-picker-option"
     ) as NodeListOf<HTMLElement>) || null;
 
-  const scrollToIndex = useCallback(
-    (index: number, smooth = false) => {
-      const container = containerRef.current;
-      const optionEls = getOptionElements();
-      if (!container || !optionEls || !optionEls[index]) return;
-      const el = optionEls[index];
-      // コンテナ中央に対象要素が来るスクロール位置を算出
-      const containerCenterOffset = container.clientHeight / 2 - el.offsetHeight / 2;
-      const targetTop = el.offsetTop - containerCenterOffset;
-      container.scrollTo({ top: targetTop, behavior: smooth ? "smooth" : "auto" });
-    },
-    [],
-  );
+  const scrollToIndex = useCallback((index: number, smooth = false) => {
+    const container = containerRef.current;
+    const optionEls = getOptionElements();
+    if (!container || !optionEls || !optionEls[index]) return;
+    const el = optionEls[index];
+    // コンテナ中央に対象要素が来るスクロール位置を算出
+    const containerCenterOffset =
+      container.clientHeight / 2 - el.offsetHeight / 2;
+    const targetTop = el.offsetTop - containerCenterOffset;
+    container.scrollTo({
+      top: targetTop,
+      behavior: smooth ? "smooth" : "auto",
+    });
+  }, []);
 
   useEffect(() => {
     if (!isScrolling) {
@@ -104,7 +105,7 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
         clearTimeout(scrollTimeoutRef.current);
       }
     },
-    [],
+    []
   );
 
   const handleItemClick = (option: string, index: number) => {
@@ -147,24 +148,27 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
   disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [hours, minutes] = parseHHmm(value);
+  // draft選択値（モーダル内専用）
+  const [draftHour, setDraftHour] = useState<string>("00");
+  const [draftMinute, setDraftMinute] = useState<string>("00");
+  // 表示用の現在値（親から渡される）
 
   // Generate options
-  const hourOptions = Array.from({ length: 23 }, (_, i) =>
-    String(i + 1).padStart(2, "0"),
+  const hourOptions = Array.from({ length: 24 }, (_, i) =>
+    String(i).padStart(2, "0")
   );
   const minuteOptions = Array.from({ length: 12 }, (_, i) =>
-    String(i * 5).padStart(2, "0"),
+    String(i * 5).padStart(2, "0")
   );
 
+  // 初期値の設定はhandleOpenでモーダル表示前に同期的に行う
+
   const handleHourChange = (newHour: string) => {
-    const newTime = `${newHour}:${minutes}`;
-    onChange(newTime);
+    setDraftHour(newHour);
   };
 
   const handleMinuteChange = (newMinute: string) => {
-    const newTime = `${hours}:${newMinute}`;
-    onChange(newTime);
+    setDraftMinute(newMinute);
   };
 
   const handleOverlayClick = (e: React.MouseEvent) => {
@@ -173,12 +177,33 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
     }
   };
 
+  const handleOpen = () => {
+    if (disabled) return;
+    const isValid = /^([01]?\d|2[0-3]):([0-5]\d)$/.test(value || "");
+    if (isValid) {
+      const [vh, vm] = parseHHmm(value);
+      setDraftHour(vh);
+      setDraftMinute(vm);
+    } else if (label.includes("出勤")) {
+      setDraftHour("08");
+      setDraftMinute("00");
+    } else if (label.includes("退勤")) {
+      setDraftHour("17");
+      setDraftMinute("00");
+    } else {
+      const [vh, vm] = parseHHmm(value);
+      setDraftHour(vh);
+      setDraftMinute(vm);
+    }
+    setIsOpen(true);
+  };
+
   return (
     <div className="drum-time-picker">
       <label className="drum-time-picker-label">{label}</label>
       <button
         className={`drum-time-picker-button ${disabled ? "disabled" : ""}`}
-        onClick={() => !disabled && setIsOpen(true)}
+        onClick={handleOpen}
         disabled={disabled}
       >
         <span className="drum-time-picker-value">{value || "未入力"}</span>
@@ -203,7 +228,7 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
                   <div className="drum-time-picker-column-label">時</div>
                   <DrumPickerItem
                     options={hourOptions}
-                    value={hours}
+                    value={draftHour}
                     onChange={handleHourChange}
                     disabled={disabled}
                   />
@@ -213,7 +238,7 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
                   <div className="drum-time-picker-column-label">分</div>
                   <DrumPickerItem
                     options={minuteOptions}
-                    value={minutes}
+                    value={draftMinute}
                     onChange={handleMinuteChange}
                     disabled={disabled}
                   />
@@ -223,7 +248,10 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
             <div className="drum-time-picker-footer">
               <button
                 className="drum-time-picker-confirm"
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  onChange(`${draftHour}:${draftMinute}`);
+                  setIsOpen(false);
+                }}
               >
                 確定
               </button>
@@ -235,4 +263,5 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
   );
 };
 
+// Generate options
 export default DrumTimePicker;
