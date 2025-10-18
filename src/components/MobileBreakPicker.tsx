@@ -35,7 +35,7 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
   return (
     <div className="form-group break-picker-group">
       <label htmlFor="mobileBreakPicker">
-        休憩時間
+        休憩時間 / Break Time
         <select
           id="mobileBreakPicker"
           value={
@@ -45,8 +45,7 @@ const MobileBreakPicker: React.FC<MobileBreakPickerProps> = ({
           className={`custom-datepicker-input ${disabled ? "time-input-disabled" : "time-input-enabled"} ${!value || value === "" ? "input-empty" : ""}`}
           disabled={disabled}
         >
-          <option value="">未入力</option>
-          <option value="0:00">0:00</option>
+          <option value="">未入力 / Not entered</option>
           <option value="00:00">00:00</option>
           {timeOptions.map((time) => (
             <option key={time} value={time}>

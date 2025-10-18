@@ -372,7 +372,7 @@ const MonthlyView: React.FC = () => {
           <button
             onClick={goToPreviousMonth}
             className="month-nav-button"
-            aria-label="前月"
+            aria-label="前月 / Previous month"
           >
             ＜
           </button>
@@ -382,7 +382,7 @@ const MonthlyView: React.FC = () => {
           <button
             onClick={goToNextMonth}
             className="month-nav-button"
-            aria-label="翌月"
+            aria-label="翌月 / Next month"
           >
             ＞
           </button>
@@ -391,20 +391,22 @@ const MonthlyView: React.FC = () => {
           onClick={handleRefresh}
           className={`refresh-button ${isRefreshing ? "refreshing" : ""}`}
           disabled={isRefreshing || isDataLoading}
-          aria-label="データを更新"
+          aria-label="データを更新 / Refresh data"
         >
-          {isRefreshing ? "更新中..." : "更新"}
+          {isRefreshing ? "更新中... / Refreshing..." : "Refresh"}
         </button>
       </div>
 
       {/* サマリー情報 */}
       <div className="monthly-summary">
         <div>
-          勤務日数:{" "}
-          <span className="summary-value">{calculateWorkingDays()}日</span>
+          Working Days:{" "}
+          <span className="summary-value">
+            {calculateWorkingDays()}日 / days
+          </span>
         </div>
         <div>
-          総勤務時間:{" "}
+          Total Time:{" "}
           <span className="summary-value">{calculateTotalHours()}</span>
         </div>
       </div>
@@ -414,12 +416,12 @@ const MonthlyView: React.FC = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th className="col-date">日付</th>
-              <th className="col-time">出勤</th>
-              <th className="col-time">退勤</th>
-              <th className="col-break">休憩</th>
-              <th className="col-worktime">勤務時間</th>
-              <th className="col-location">勤務場所</th>
+              <th className="col-date">日付 / Date</th>
+              <th className="col-time">出勤 / In</th>
+              <th className="col-time">退勤 / Out</th>
+              <th className="col-break">休憩 / Break</th>
+              <th className="col-worktime">勤務時間 / Work Time</th>
+              <th className="col-location">勤務場所 / Location</th>
             </tr>
           </thead>
           <tbody>
@@ -427,8 +429,8 @@ const MonthlyView: React.FC = () => {
               <tr>
                 <td colSpan={6} className="no-data-message">
                   {isDataLoading
-                    ? "データを読み込み中..."
-                    : "この月のデータはありません"}
+                    ? "データを読み込み中... / Loading data..."
+                    : "この月のデータはありません / No data for this month"}
                 </td>
               </tr>
             ) : (
@@ -464,7 +466,9 @@ const MonthlyView: React.FC = () => {
       {(isDataLoading || isRefreshing) && (
         <div className="loading-overlay">
           <div className="loading-spinner" />
-          <div className="loading-text">データを読み込み中...</div>
+          <div className="loading-text">
+            データを読み込み中... / Loading data...
+          </div>
         </div>
       )}
     </div>

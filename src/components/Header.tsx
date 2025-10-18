@@ -195,7 +195,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
         </h1>
         <div className="header-right">
           <button className="logout-button" onClick={onLogout}>
-            ログアウト
+            Logout
           </button>
         </div>
       </div>
@@ -205,13 +205,13 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
           to="/"
           className={`tab-button ${location.pathname === "/" ? "active" : ""}`}
         >
-          日次入力
+          日次入力 / Daily
         </Link>
         <Link
           to="/monthly"
           className={`tab-button ${location.pathname === "/monthly" ? "active" : ""}`}
         >
-          月次ビュー
+          月次ビュー / Monthly
         </Link>
       </div>
 

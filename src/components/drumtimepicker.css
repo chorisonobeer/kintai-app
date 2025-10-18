@@ -54,7 +54,7 @@
 }
 
 .drum-time-picker-icon {
-  font-size: 20px;
+  font-size: 16px;
   opacity: 0.7;
 }
 
@@ -314,7 +314,7 @@
   }
 
   .drum-time-picker-value {
-    font-size: 20px;
+    font-size: 16px;
   }
 }
 

@@ -19,8 +19,9 @@ if ('serviceWorker' in navigator) {
           console.log('New version available:', version);
           
           // ユーザーに更新を通知
-          if (confirm('新しいバージョンが利用可能です。ページを更新しますか？')) {
-            window.location.reload();
+          // ...
+          if (confirm('新しいバージョンが利用可能です。ページを更新しますか？ / A new version is available. Refresh the page?')) {
+          window.location.reload();
           }
         }
       });

@@ -75,7 +75,7 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
 
   return (
     <div className="form-group date-picker-group">
-      <label>日付</label>
+      <label>日付 / Date</label>
 
       <div className="month-control">
         <div className="month-selector">
@@ -85,7 +85,7 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
               className="month-nav-button"
               onClick={handlePreviousDay}
               disabled={disabled}
-              aria-label="前日"
+              aria-label="前日 / Previous day"
             >
               ＜
             </button>
@@ -111,7 +111,7 @@ const MobileDatePicker: React.FC<MobileDatePickerProps> = ({
               className="month-nav-button"
               onClick={handleNextDay}
               disabled={disabled}
-              aria-label="翌日"
+              aria-label="翌日 / Next day"
             >
               ＞
             </button>

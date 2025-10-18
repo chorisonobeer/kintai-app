@@ -457,12 +457,14 @@ const KintaiForm: React.FC = () => {
 
     // 勤務場所の必須チェック
     if (!data.location || data.location.trim() === "") {
-      newErrors.location = "勤務場所を選択してください";
+      newErrors.location =
+        "勤務場所を選択してください / Please select a work location";
     }
 
     // 出勤時間が退勤時間より前かチェック
     if (!isTimeBeforeOrEqual(data.startTime, data.endTime)) {
-      newErrors.endTime = "退勤時間は出勤時間より後にしてください";
+      newErrors.endTime =
+        "退勤時間は出勤時間より後にしてください / End time must be after start time";
     }
 
     setErrors(newErrors);
@@ -492,10 +494,16 @@ const KintaiForm: React.FC = () => {
           // データ保存後にKintaiContextの月次データを更新
           await refreshData();
         } else {
-          setErrors({ general: result.error || "エラーが発生しました" });
+          setErrors({
+            general:
+              (result.error || "エラーが発生しました") + " / An error occurred",
+          });
         }
       } catch (error) {
-        setErrors({ general: "保存中にエラーが発生しました" });
+        setErrors({
+          general:
+            "保存中にエラーが発生しました / An error occurred while saving",
+        });
       }
     }
 
@@ -591,9 +599,9 @@ const KintaiForm: React.FC = () => {
   // ボタンのテキストを取得
   const getSaveButtonText = (): string => {
     if (isVeryOldDate()) {
-      return `編集不可（${EDITABLE_DAYS}日以上前）`;
+      return `編集不可（${EDITABLE_DAYS}日以上前） / Not editable (older than ${EDITABLE_DAYS} days)`;
     }
-    return "入力済み 長押しで編集";
+    return "入力済み（長押しで編集） / Entered (long‑press to edit)";
   };
 
   return (
@@ -628,20 +636,21 @@ const KintaiForm: React.FC = () => {
               color: "#666",
             }}
           >
-            📅 データを読み込み中...
+            📅 データを読み込み中... / Loading data...
           </div>
         )}
 
         {/* 古い日付の警告 */}
         {tooOldDateWarning && (
           <div className="warning-message">
-            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません
+            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません / Dates older than{" "}
+            {EDITABLE_DAYS} days cannot be edited
           </div>
         )}
 
         {/* 出勤時間 */}
         <MobileTimePicker
-          label="出勤時間"
+          label="出勤時間 / Clock‑in Time"
           value={startTime}
           onChange={handleStartTimeChange}
           disabled={
@@ -670,7 +679,7 @@ const KintaiForm: React.FC = () => {
 
         {/* 退勤時間 */}
         <MobileTimePicker
-          label="退勤時間"
+          label="退勤時間 / Clock‑out Time"
           value={endTime}
           onChange={handleEndTimeChange}
           disabled={
@@ -685,7 +694,7 @@ const KintaiForm: React.FC = () => {
 
         {/* 勤務時間 */}
         <div className="form-group">
-          <label>勤務時間</label>
+          <label>勤務時間 / Working Time</label>
           <div className="time-display working-time-display">
             {workingTime ||
               (formState.isSaved && !formState.isEditing ? "-" : "0:00")}
@@ -694,7 +703,7 @@ const KintaiForm: React.FC = () => {
 
         {/* 勤務場所 */}
         <div className="form-group">
-          <label>勤務場所</label>
+          <label>勤務場所 / Work Task</label>
           <select
             value={location}
             onChange={handleLocationChange}
@@ -705,11 +714,11 @@ const KintaiForm: React.FC = () => {
             }
             className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""} ${!location || location === "" ? "input-empty" : ""}`}
           >
-            <option value="">未選択</option>
-            <option value="田んぼ">田んぼ</option>
-            <option value="柿農園">柿農園</option>
-            <option value="事務所">事務所</option>
-            <option value="その他">その他</option>
+            <option value="">未選択 / Not selected</option>
+            <option value="田んぼ">田んぼ / Rice field</option>
+            <option value="柿農園">柿農園 / Persimmon farm</option>
+            <option value="事務所">事務所 / Office</option>
+            <option value="その他">その他 / Other</option>
           </select>
         </div>
         {errors.location && (
@@ -734,7 +743,7 @@ const KintaiForm: React.FC = () => {
                   isVeryOldDate()
                 }
               >
-                保存する
+                保存する / Save
               </button>
               <div
                 className="button-row"
@@ -750,7 +759,7 @@ const KintaiForm: React.FC = () => {
                   }}
                   disabled={isSubmitting}
                 >
-                  削除
+                  削除 / Delete
                 </button>
                 <button
                   className="btn"
@@ -758,7 +767,7 @@ const KintaiForm: React.FC = () => {
                   style={{ flex: 1, backgroundColor: "#9e9e9e" }}
                   disabled={isSubmitting}
                 >
-                  キャンセル
+                  キャンセル / Cancel
                 </button>
               </div>
             </>
@@ -811,7 +820,7 @@ const KintaiForm: React.FC = () => {
                 isVeryOldDate()
               }
             >
-              保存する
+              保存する / Save
             </button>
           )}
         </div>
@@ -852,12 +861,13 @@ const KintaiForm: React.FC = () => {
                 fontWeight: "600",
               }}
             >
-              データを削除しますか？
+              データを削除しますか？ / Delete this data?
             </h3>
             <p
               style={{ margin: "0 0 24px 0", color: "#666", lineHeight: "1.5" }}
             >
-              出勤時間、休憩時間、退勤時間、勤務場所のデータが削除されます。
+              出勤時間、休憩時間、退勤時間、勤務場所のデータが削除されます。 /
+              Clock‑in, break, clock‑out, and location data will be deleted.
             </p>
             <div
               style={{
@@ -878,7 +888,7 @@ const KintaiForm: React.FC = () => {
                   cursor: "pointer",
                 }}
               >
-                キャンセル
+                キャンセル / Cancel
               </button>
               <button
                 className="btn"
@@ -892,7 +902,7 @@ const KintaiForm: React.FC = () => {
                   cursor: "pointer",
                 }}
               >
-                削除する
+                削除する / Delete
               </button>
             </div>
           </div>
