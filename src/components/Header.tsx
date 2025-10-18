@@ -19,59 +19,27 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, isVersionUpdating = false }) => {
   const location = useLocation();
   const userName = getUserName();
-  // const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showDeployInfoModal, setShowDeployInfoModal] = useState(false);
-  // const [versionCompatibility, setVersionCompatibility] = useState<{
-  //   compatible: boolean;
-  //   message?: string;
-  // }>({ compatible: true });
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
     null
   );
   const [longPressProgress, setLongPressProgress] = useState(0);
   const [isLongPressing, setIsLongPressing] = useState(false);
   const longPressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [longPressTriggered, setLongPressTriggered] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // useEffect(() => {
-  //   // バージョン情報を取得
-  //   const fetchVersionInfo = async () => {
-  //     console.log("=== Header: バージョン情報取得開始 ===");
-  //     try {
-  //       console.log("getVersionInfo() を呼び出し中...");
-  //       const info = await getVersionInfo();
-  //       console.log("取得したバージョン情報:", info);
-  //       setVersionInfo(info);
-
-  //       // バージョン互換性をチェック
-  //       console.log("バージョン互換性チェック中...");
-  //       const compatibility = checkVersionCompatibility();
-  //       console.log("互換性チェック結果:", compatibility);
-  //       setVersionCompatibility(compatibility);
-
-  //       console.log("=== Header: バージョン情報取得完了 ===");
-  //     } catch (error) {
-  //       console.error("=== Header: バージョン情報の取得に失敗 ===", error);
-  //       console.error("エラーの詳細:", {
-  //         message: (error as Error).message,
-  //         stack: (error as Error).stack,
-  //       });
-  //     }
-  //   };
-
-  //   fetchVersionInfo();
-  // }, []);
-
-  // 長押し開始
+  // 長押し開始（3秒でデプロイ情報モーダル）
   const handleLongPressStart = () => {
     const timer = setTimeout(() => {
-      setShowVersionModal(true);
+      setShowDeployInfoModal(true);
+      setLongPressTriggered(true);
     }, 3000); // 3秒
     setLongPressTimer(timer);
     setIsLongPressing(true);
     setLongPressProgress(0);
 
-    // プログレスバーのアニメーション
     const startTime = Date.now();
     const duration = 3000; // 3秒
 
@@ -103,6 +71,45 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
     }
   };
 
+  // タイトルクリック（短押し）で手動更新チェック
+  const manualUpdateCheck = async () => {
+    if (location.pathname !== "/") return; // 日次画面のみ
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      try { await reg?.update(); } catch {}
+      if (reg?.active) {
+        reg.active.postMessage({ type: "CHECK_FOR_UPDATES" });
+      }
+      // フォールバック: version.json とクライアントのビルド時刻を比較
+      const resp = await fetch(`/version.json?t=${Date.now()}`, {
+        cache: "no-cache",
+        headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
+      });
+      if (resp.ok) {
+        const server = await resp.json();
+        const clientBuildTime = import.meta.env.VITE_BUILD_TIME as string | undefined;
+        if (clientBuildTime && server?.buildTime && server.buildTime !== clientBuildTime) {
+          window.location.reload();
+          return;
+        }
+      }
+      setToastMessage("最新です");
+      setTimeout(() => setToastMessage(null), 2000);
+    } catch (error) {
+      setToastMessage("更新確認に失敗しました");
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  const handleTitleClick = () => {
+    if (longPressTriggered) {
+      // 長押し後のクリックは無視（ダブルトリガ防止）
+      setLongPressTriggered(false);
+      return;
+    }
+    manualUpdateCheck();
+  };
+
   // コンポーネントのクリーンアップ
   useEffect(() => {
     return () => {
@@ -114,7 +121,6 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
 
   return (
     <div className="app-header">
-      {/* バージョン更新プログレスバー */}
       {isVersionUpdating && (
         <div className="version-update-progress-bar">
           <div 
@@ -123,13 +129,27 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
           />
         </div>
       )}
-      
-      {/* バージョン互換性警告 */}
-      {/* {!versionCompatibility.compatible && (
-        <div className="version-warning">⚠️ {versionCompatibility.message}</div>
-      )} */}
 
-      {/* 1行目：ユーザー名、タイトル、バージョン、ログアウト */}
+      {/* 簡易トースト */}
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: 8,
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "rgba(0,0,0,0.8)",
+            color: "#fff",
+            padding: "6px 12px",
+            borderRadius: 12,
+            fontSize: 12,
+            zIndex: 1000,
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
       <div className="top-header">
         <div className="user-info">
           <span className="user-name">{userName}</span>
@@ -140,7 +160,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
           onMouseLeave={handleLongPressEnd}
           onTouchStart={handleLongPressStart}
           onTouchEnd={handleLongPressEnd}
-          onClick={() => setShowDeployInfoModal(true)}
+          onClick={handleTitleClick}
           style={{
             cursor: "pointer",
             userSelect: "none",
@@ -153,9 +173,8 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
             padding: "4px 8px",
             transition: isLongPressing ? "none" : "background-color 0.2s ease",
           }}
-          title="タップでデプロイ情報を表示 / 3秒長押しでバージョン情報を表示"
+          title="タップで更新確認 / 3秒長押しでデプロイ情報表示"
         >
-          {/* プログレスバー */}
           {isLongPressing && (
             <div
               style={{
@@ -181,7 +200,6 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
         </div>
       </div>
 
-      {/* 2行目：ナビゲーション */}
       <div className="nav-tabs">
         <Link
           to="/"
@@ -197,7 +215,6 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
         </Link>
       </div>
 
-      {/* バージョン情報モーダル */}
       {showVersionModal && (
         <div
           className="modal-overlay"
@@ -220,41 +237,12 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
                     バージョン情報機能は一時的に無効化されています
                   </strong>
                 </div>
-                {/* <div className="version-item">
-                  <strong>アプリバージョン:</strong> {getClientVersion()}
-                </div>
-                <div className="version-item">
-                  <strong>サーバーバージョン:</strong>{" "}
-                  {versionInfo?.version || "N/A"}
-                </div>
-                <div className="version-item">
-                  <strong>最終更新:</strong>{" "}
-                  {versionInfo?.timestamp
-                    ? new Date(versionInfo.timestamp).toLocaleString("ja-JP")
-                    : "N/A"}
-                </div>
-                <div className="version-item">
-                  <strong>説明:</strong> {versionInfo?.description || "N/A"}
-                </div>
-                <div className="version-item">
-                  <strong>互換性:</strong>{" "}
-                  <span
-                    style={{
-                      color: versionCompatibility.compatible ? "green" : "red",
-                    }}
-                  >
-                    {versionCompatibility.compatible
-                      ? "✓ 互換性あり"
-                      : "✗ 互換性なし"}
-                  </span>
-                </div> */}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* デプロイ情報モーダル（デバッグ用） */}
       <DeployInfoModal
         isOpen={showDeployInfoModal}
         onClose={() => setShowDeployInfoModal(false)}

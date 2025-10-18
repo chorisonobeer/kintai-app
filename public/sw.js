@@ -266,6 +266,18 @@ self.addEventListener('message', (event) => {
       // 同期状態の更新（ログ出力など）
       console.log('Sync status update:', data);
       break;
+
+    case 'CHECK_FOR_UPDATES':
+      // 手動更新チェック要求
+      (async () => {
+        const updated = await checkForUpdates();
+        if (!updated) {
+          // 最新の場合は通知
+          const clients = await self.clients.matchAll();
+          clients.forEach(client => client.postMessage({ type: 'VERSION_LATEST' }));
+        }
+      })();
+      break;
       
     default:
       console.log('Unknown message type:', type);
