@@ -10,6 +10,7 @@ import React, {
   useTransition,
   useDeferredValue,
   useRef,
+  useLayoutEffect,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import MobileDatePicker from "./MobileDatePicker";
@@ -28,8 +29,9 @@ import {
   getSelectableDates,
   EDITABLE_DAYS,
 } from "../utils/dateUtils";
-import { saveKintaiToServer, isAuthenticated } from "../utils/apiService";
+import { saveKintaiToServer, isAuthenticated, getJobWageOptionsFromCsv } from "../utils/apiService";
 import { useKintai } from "../contexts/KintaiContext";
+import LoadingModal from "./LoadingModal";
 
 // 初期状態
 const initialState: KintaiFormState = {
@@ -198,6 +200,7 @@ const KintaiForm: React.FC = () => {
   const [location, setLocation] = useState(initialState.location);
   const [workingTime, setWorkingTime] = useState(""); // 勤務時間の状態を追加
   const [errors, setErrors] = useState<ValidationErrors>({});
+  const [jobOptions, setJobOptions] = useState<Array<{ job: string; wage: number | null }>>([]);
 
   // ローディング状態を管理
   const [isDataLoading, setIsDataLoading] = useState(false);
@@ -272,6 +275,16 @@ const KintaiForm: React.FC = () => {
     );
     setWorkingTime(calculatedWorkingTime);
   }, [startTime, endTime, breakTime]);
+
+  // 仕事内容・時給の選択肢をCSVから取得（フロント直取得）
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await getJobWageOptionsFromCsv();
+        setJobOptions(list);
+      } catch {}
+    })();
+  }, []);
 
   // 日付に入力済みフラグチェック
 
@@ -385,7 +398,45 @@ const KintaiForm: React.FC = () => {
   >("right");
   const [_previousDate, setPreviousDate] = useState(formState.date);
 
-  // 入力値変更ハンドラー
+  // 画面高に収めるためのスケール制御
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [fitScale, setFitScale] = useState(1);
+  const [availableHeight, setAvailableHeight] = useState<number | null>(null);
+
+  const measureAndFit = () => {
+    try {
+      if (!contentRef.current) return;
+      const rectTop = contentRef.current.getBoundingClientRect().top;
+      const viewportH = (window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
+      const available = Math.max(0, viewportH - rectTop);
+      setAvailableHeight(available);
+
+      // 実際のコンテンツ総高さ（スケール前）を取得
+      const contentHeight = contentRef.current.scrollHeight;
+      if (contentHeight <= 0 || available <= 0) {
+        setFitScale(1);
+        return;
+      }
+      const scale = Math.min(1, available / contentHeight);
+      // 極端な縮小を避けるための下限（必要なら調整可能）
+      const clamped = Math.max(0.8, scale);
+      setFitScale(clamped);
+    } catch {}
+  };
+
+  useLayoutEffect(() => {
+    measureAndFit();
+  });
+
+  useEffect(() => {
+    const onResize = () => measureAndFit();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize as any);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize as any);
+    };
+  }, []);
   const handleDateChange = (date: string) => {
     // 日付の変更方向を判定
     const currentDateObj = new Date(formState.date);
@@ -526,16 +577,48 @@ const KintaiForm: React.FC = () => {
   };
 
   // データ削除処理
-  const handleDeleteConfirm = () => {
-    // 全フィールドを空文字に設定
-    setStartTime("");
-    setBreakTime("");
-    setEndTime("");
-    setLocation("");
-    // モーダルを閉じる
-    setShowDeleteModal(false);
-    // 編集モードを終了
-    dispatch({ type: EditActionType.CANCEL_EDIT });
+  const handleDeleteConfirm = async () => {
+    try {
+      setIsSubmitting(true);
+      // ユーザ操作のフィードバックを優先して、削除開始時点でモーダルを閉じる
+      setShowDeleteModal(false);
+
+      // サーバーに空データを送信して該当日の値をクリア（A案）
+      const result = await saveKintaiToServer({
+        date: formState.date,
+        startTime: "",
+        breakTime: "",
+        endTime: "",
+        location: "",
+      });
+
+      if (!result.success) {
+        setErrors({
+          general: (result.error || "削除に失敗しました") + " / Failed to delete",
+        });
+        return; // 失敗時もモーダルは閉じたまま
+      }
+
+      // ローカルフォーム値もクリア
+      setStartTime("");
+      setBreakTime("");
+      setEndTime("");
+      setLocation("");
+      setWorkingTime("");
+
+      // 編集終了
+      dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
+      dispatch({ type: EditActionType.CANCEL_EDIT });
+
+      // 月次データを再取得してUIへ反映
+      await refreshData();
+    } catch (error) {
+      setErrors({
+        general: "削除処理でエラーが発生しました / Error occurred during deletion",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 長押し処理
@@ -618,33 +701,49 @@ const KintaiForm: React.FC = () => {
 
       {/* コンテンツ部分（スライドアニメーション対象） */}
       <div
-        className={`kintai-form-content ${
-          isAnimating ? `animating slide-out-${animationDirection}` : ""
-        }`}
+        ref={contentRef}
+        className={`kintai-form-content ${isAnimating ? `animating slide-out-${animationDirection}` : ""}`}
+        style={{
+          height: availableHeight ?? undefined,
+          overflow: "hidden",
+          transform: fitScale < 1 ? `scale(${fitScale})` : undefined,
+          transformOrigin: "top center",
+          willChange: fitScale < 1 ? "transform" : undefined,
+        }}
       >
         {/* データ読み込み中の表示 */}
         {isDataLoading && (
+          // 既存のインライン通知をモーダルへ置換
+          <></>
+        )}
+
+        {isSubmitting && (
+          // 既存のインライン通知をモーダルへ置換
+          <></>
+        )}
+
+        {/* 書き込み中の表示（保存・削除などGASへの書き込み処理中） */}
+        {isSubmitting && (
           <div
-            className="loading-message"
+            className="writing-message"
             style={{
               padding: "8px 16px",
-              backgroundColor: "#f0f8ff",
-              border: "1px solid #e0e0e0",
+              backgroundColor: "#fff8e1",
+              border: "1px solid #ffe082",
               borderRadius: "4px",
               margin: "8px 0",
               fontSize: "14px",
-              color: "#666",
+              color: "#8d6e63",
             }}
           >
-            📅 データを読み込み中... / Loading data...
+            📝 書き込み中です... / Writing...
           </div>
         )}
 
         {/* 古い日付の警告 */}
         {tooOldDateWarning && (
           <div className="warning-message">
-            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません / Dates older than{" "}
-            {EDITABLE_DAYS} days cannot be edited
+            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません / Dates older than {EDITABLE_DAYS} days cannot be edited
           </div>
         )}
 
@@ -715,10 +814,20 @@ const KintaiForm: React.FC = () => {
             className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""} ${!location || location === "" ? "input-empty" : ""}`}
           >
             <option value="">未選択 / Not selected</option>
-            <option value="田んぼ">田んぼ / Rice field</option>
-            <option value="柿農園">柿農園 / Persimmon farm</option>
-            <option value="事務所">事務所 / Office</option>
-            <option value="その他">その他 / Other</option>
+            {jobOptions && jobOptions.length > 0 ? (
+              jobOptions.map((opt) => (
+                <option key={opt.job} value={opt.job}>
+                  {opt.job}{opt.wage !== null ? ` / ¥${opt.wage}` : ""}
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="田んぼ">田んぼ / Rice field</option>
+                <option value="柿農園">柿農園 / Persimmon farm</option>
+                <option value="事務所">事務所 / Office</option>
+                <option value="その他">その他 / Other</option>
+              </>
+            )}
           </select>
         </div>
         {errors.location && (
@@ -908,6 +1017,19 @@ const KintaiForm: React.FC = () => {
           </div>
         </div>
       )}
+      {/* 読み込み/書き込みモーダル */}
+      <LoadingModal
+        isOpen={isDataLoading}
+        isLoading={true}
+        message="データを読み込み中... / Loading data..."
+        subMessage="最新の勤怠データを取得しています"
+      />
+      <LoadingModal
+        isOpen={isSubmitting}
+        isLoading={false}
+        message="書き込み中... / Writing..."
+        subMessage="サーバーへ保存しています"
+      />
     </div>
   );
 };

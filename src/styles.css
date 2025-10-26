@@ -525,19 +525,42 @@ body {
   background-color: white;
 }
 
-/* フォーム部分の余白を調整 */
+/* フォーム部分の余白を調整（モバイル安全なビューポート対応） */
 .kintai-form {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: auto;
-  padding: 12px 20px;
+  overflow: hidden;
+  /* 上はそのまま、下左右を半分に調整 */
+  padding: 12px 10px 6px 10px;
   -webkit-overflow-scrolling: touch;
   background-color: transparent;
   border: none;
   box-shadow: none;
-  /* モバイル対応: 1画面に収まるよう高さ制限 */
-  max-height: calc(100dvh - 120px);
+  /* 動的ビューポート高さに追随し、クリップを避ける */
+  min-height: 100dvh;
+  min-height: 100svh;
+  min-height: 100vh;
+  min-height: var(--vvh);
+  /* iOSホームインジケータ等のセーフエリアに配慮 */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 入力本体は1画面に収める（スクロール無し） */
+.kintai-form-content {
+  flex: 1;
+  overflow: hidden;
+  -webkit-overflow-scrolling: auto;
+}
+
+/* 下部ボタン行は通常フローで表示（スケールに追随） */
+.button-container {
+  position: relative;
+  bottom: auto;
+  /* 下余白を半分に調整 */
+  padding-bottom: 4px;
+  background-color: transparent;
+  z-index: 1;
 }
 
 /* 月次部分のコンテナ調整 */

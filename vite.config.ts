@@ -61,9 +61,10 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           rewrite: (path) => path
         },
-        // GAS API用のプロキシ設定（開発時に直接GASを呼び出す場合）
+        // GAS API用のプロキシ設定（開発時に直接GASを呼び
+        // 出す場合）
         '/api/gas': {
-          target: 'https://script.google.com/macros/s/AKfycbzW33cRCB_rYdRx-bNQhj-2pghluHl09_iu26As9Xm7f7PIEoRk2B_42ubLYO6kKpid4w',
+          target: 'https://script.google.com/macros/s/AKfycbwKy0xPeGCpj9TWikx6sMSb_BuppWhZnNEueNbndHfGGDQnNSbma2ymM1eUig7kBdcy',
           changeOrigin: true,
           secure: true,
           rewrite: (path) => '/exec',

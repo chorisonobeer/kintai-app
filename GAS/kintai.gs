@@ -126,7 +126,14 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
     /** @type {string} */
     const { date, startTime, breakTime, endTime, spreadsheetId, userId, location } = payload;
     
-    if (!date || !startTime || !endTime || !spreadsheetId || !userId) {
+    // 削除意図の判定（時間が空、かつ勤務地も未指定なら削除）
+    // breakTime は空文字/"00:00" など多様な表現がありうるため削除判定から除外
+    /** @type {boolean} */
+    const isDelete = (!startTime && !endTime && (!location || String(location).trim() === ''));
+    diagInfo.isDelete = isDelete;
+    
+    // 削除時は date/spreadsheetId のみ必須。通常保存では startTime/endTime と userId 必須
+    if (!date || !spreadsheetId || (!isDelete && (!userId || !startTime || !endTime))) {
       diagInfo.missingParams = true;
       return Utils.createResponse({
         ok: false,
@@ -167,38 +174,41 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
     /** @type {string|number} */
     let workingTime = 0;
     try {
-      // 勤務時間計算（時:分形式の時間から計算）
-      /** @type {string[]} */
-      const startParts = startTime.split(':');
-      /** @type {string[]} */
-      const endParts = endTime.split(':');
-      
-      /** @type {number} */
-      const startMinutes = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
-      /** @type {number} */
-      const endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
-      
-      // 休憩時間を分で計算（HH:mm形式から）
-      /** @type {number} */
-      let breakMinutes = 0;
-      if (breakTime && breakTime.includes(':')) {
+      if (!isDelete && startTime && endTime) {
+        // 勤務時間計算（時:分形式の時間から計算）
         /** @type {string[]} */
-        const breakParts = breakTime.split(':');
-        breakMinutes = parseInt(breakParts[0], 10) * 60 + parseInt(breakParts[1], 10);
-      }
-      
-      // 総勤務時間（分）= 終了時間 - 開始時間 - 休憩時間
-      /** @type {number} */
-      const totalMinutes = endMinutes - startMinutes - breakMinutes;
-      
-      // 勤務時間を時:分形式で計算（診断情報用のみ）
-      if (totalMinutes > 0) {
+        const startParts = startTime.split(':');
+        /** @type {string[]} */
+        const endParts = endTime.split(':');
+        
         /** @type {number} */
-        const workHours = Math.floor(totalMinutes / 60);
+        const startMinutes = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
         /** @type {number} */
-        const workMins = totalMinutes % 60;
-        workingTime = `${workHours}:${workMins.toString().padStart(2, '0')}`;
+        const endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+        
+        // 休憩時間を分で計算（HH:mm形式から）
+        /** @type {number} */
+        let breakMinutes = 0;
+        if (breakTime && breakTime.includes(':')) {
+          /** @type {string[]} */
+          const breakParts = breakTime.split(':');
+          breakMinutes = parseInt(breakParts[0], 10) * 60 + parseInt(breakParts[1], 10);
+        }
+        
+        /** @type {number} */
+        const totalMinutes = endMinutes - startMinutes - breakMinutes;
+        
+        if (totalMinutes > 0) {
+          /** @type {number} */
+          const workHours = Math.floor(totalMinutes / 60);
+          /** @type {number} */
+          const workMins = totalMinutes % 60;
+          workingTime = `${workHours}:${workMins.toString().padStart(2, '0')}`;
+        } else {
+          workingTime = '0:00';
+        }
       } else {
+        // 削除時は勤務時間を0:00として扱う
         workingTime = '0:00';
       }
       diagInfo.workingTime = workingTime;
@@ -240,13 +250,17 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       
       // スプレッドシートに勤怠データを保存
       // C、D、E列のみ書き込み
-      sheet.getRange(rowIndex, 3, 1, 1).setValue(startTime); // C列: 出勤時間
-      sheet.getRange(rowIndex, 4, 1, 1).setValue(formatBreakTime(breakTime)); // D列: 休憩時間
-      sheet.getRange(rowIndex, 5, 1, 1).setValue(endTime); // E列: 退勤時間
+      const cVal = isDelete ? '' : startTime;
+      const dVal = isDelete ? '' : formatBreakTime(breakTime);
+      const eVal = isDelete ? '' : endTime;
+      sheet.getRange(rowIndex, 3, 1, 3).setValues([[cVal, dVal, eVal]]); // C〜E列を一括書き込み
       
-      // G列（勤務場所）を別途書き込み
+      // G列（勤務場所）
       if (location) {
         sheet.getRange(rowIndex, 7, 1, 1).setValue(location);
+      } else if (isDelete) {
+        // 削除時はG列も必ず空にする
+        sheet.getRange(rowIndex, 7, 1, 1).setValue('');
       }
       diagInfo.updated = true;
       diagInfo.rowUpdated = rowIndex;
@@ -420,25 +434,39 @@ function getDayOfYear(year, month, day) {
 }
 
 /**
- * シート内で日付に一致する行を検索
+ * シート内で日付に一致する行を検索（A列限定、TextFinder補助＋フォールバック）
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 検索対象のスプレッドシート
  * @param {string} targetDateStr - 検索する日付（YYYY/MM/DD形式）
  * @returns {number} 見つかった行番号（1から始まる）、見つからない場合は-1
- * @description スプレッドシートのA列で指定された日付に一致する行を検索する
+ * @description A列の日本語表示（YYYY年M月D日…）をTextFinderで探し、見つからなければ従来の正規化比較で検索する
  */
 function searchRowByDate(sheet, targetDateStr) {
-  /** @type {GoogleAppsScript.Spreadsheet.Range} */
-  const dataRange = sheet.getDataRange();
-  /** @type {any[][]} */
-  const values = dataRange.getValues();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return -1;
   
-  for (let i = 1; i < values.length; i++) { // ヘッダー行をスキップ
-    /** @type {any} */
-    let rowDate = values[i][0]; // A列の日付
-    /** @type {string} */
+  // まず A列の表示文字列に対してTextFinderで日本語日付部分を検索
+  // targetDateStr は 'YYYY/MM/DD' なので、日本語部分 'YYYY年M月D日' に変換
+  let jpDatePrefix = '';
+  try {
+    const [y, m, d] = targetDateStr.split('/');
+    jpDatePrefix = `${parseInt(y,10)}年${parseInt(m,10)}月${parseInt(d,10)}日`;
+  } catch (_) {
+    jpDatePrefix = '';
+  }
+  if (jpDatePrefix) {
+    const aRange = sheet.getRange(2, 1, lastRow - 1, 1); // A列のみ
+    const finder = aRange.createTextFinder(jpDatePrefix).matchCase(false);
+    const found = finder.findNext();
+    if (found) {
+      return found.getRow();
+    }
+  }
+  
+  // フォールバック: A列のみ読み込んで正規化比較（従来互換）
+  const aValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < aValues.length; i++) {
+    const rowDate = aValues[i][0];
     let rowDateStr = '';
-    
-    // 日付の正規化
     if (rowDate instanceof Date) {
       const y = rowDate.getFullYear();
       const m = (rowDate.getMonth() + 1).toString().padStart(2, '0');
@@ -447,9 +475,8 @@ function searchRowByDate(sheet, targetDateStr) {
     } else if (typeof rowDate === 'string') {
       rowDateStr = normalizeDate(rowDate);
     }
-    
     if (rowDateStr === targetDateStr) {
-      return i + 1; // 行番号は1から始まる
+      return i + 2; // 2行目開始なので+2
     }
   }
   
@@ -469,7 +496,7 @@ function searchRowByDate(sheet, targetDateStr) {
  */
 Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
   diagInfo.stage = 'getMonthlyData';
-  Logger.log("月間勤怠データ取得開始: " + JSON.stringify(payload));
+  if (debug) Logger.log("月間勤怠データ取得開始: " + JSON.stringify(payload));
   
   try {
     // トークン検証
@@ -498,10 +525,10 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
         });
       }
       
-      Logger.log("トークン検証成功: " + JSON.stringify(tokenInfo));
+      if (debug) Logger.log("トークン検証成功: " + JSON.stringify(tokenInfo));
     } catch (tokenErr) {
       diagInfo.tokenError = String(tokenErr);
-      Logger.log("トークン検証エラー: " + tokenErr);
+      if (debug) Logger.log("トークン検証エラー: " + tokenErr);
       return Utils.createResponse({
         ok: false,
         err: 'トークン検証エラー',
@@ -516,7 +543,7 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
     
     if (!spreadsheetId) {
       diagInfo.missingParam = 'spreadsheetId';
-      Logger.log("スプレッドシートID未指定");
+      if (debug) Logger.log("スプレッドシートID未指定");
       return Utils.createResponse({
         ok: false,
         err: 'スプレッドシートIDが未指定です',
@@ -526,7 +553,7 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
     
     if (!userId) {
       diagInfo.missingParam = 'userId';
-      Logger.log("ユーザーID未指定");
+      if (debug) Logger.log("ユーザーID未指定");
       return Utils.createResponse({
         ok: false,
         err: 'ユーザーIDが未指定です',
@@ -534,9 +561,8 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
       });
     }
     
-    if (!year || !month) {
-      diagInfo.missingParam = 'year/month';
-      Logger.log("年月未指定");
+    if (year == null || month == null) {
+      diagInfo.missingParam = !month ? 'month' : 'year';
       return Utils.createResponse({
         ok: false,
         err: '年月が未指定です',
@@ -544,15 +570,8 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
       });
     }
     
-    diagInfo.providedSpreadsheetId = spreadsheetId;
-    diagInfo.providedUserId = userId;
-    diagInfo.providedYear = year;
-    diagInfo.providedMonth = month;
-    
-    Logger.log(`対象年月: ${year}年${month}月`);
-    
     // スプレッドシートアクセス
-    diagInfo.stage = 'kintai_sheet_access';
+    diagInfo.stage = 'spreadsheet_access';
     /** @type {GoogleAppsScript.Spreadsheet.Spreadsheet} */
     let ss;
     /** @type {GoogleAppsScript.Spreadsheet.Sheet} */
@@ -563,19 +582,15 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
       
       if (!sheet) {
         diagInfo.sheetError = 'データシートが見つかりません';
-        Logger.log("データシート見つからず");
         return Utils.createResponse({
           ok: false,
           err: 'データシートが見つかりません',
           debug: debug ? diagInfo : undefined
         });
       }
-      
-      diagInfo.sheetFound = true;
-      Logger.log("データシート見つかりました");
     } catch (sheetErr) {
       diagInfo.sheetError = String(sheetErr);
-      Logger.log("スプレッドシートアクセスエラー: " + sheetErr);
+      if (debug) Logger.log("シートアクセスエラー: " + sheetErr);
       return Utils.createResponse({
         ok: false,
         err: 'スプレッドシートアクセスエラー',
@@ -583,273 +598,83 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
       });
     }
     
-    // データ取得
-    diagInfo.stage = 'monthly_data_fetch';
+    // データの抽出と変換
+    diagInfo.stage = 'read_data';
+    /** @type {GoogleAppsScript.Spreadsheet.Range} */
+    const range = sheet.getDataRange();
     /** @type {any[][]} */
-    let rows;
-    try {
-      // 1行目がヘッダーなので2行目から取得
-      /** @type {GoogleAppsScript.Spreadsheet.Range} */
-      const dataRange = sheet.getDataRange();
-      diagInfo.sheetLastRow = dataRange.getNumRows();
-      diagInfo.sheetLastColumn = dataRange.getNumColumns();
-      
-      Logger.log("シート行数: " + dataRange.getNumRows());
-      
-      if (dataRange.getNumRows() <= 1) {
-        // ヘッダーしかない場合
-        rows = [];
-      } else {
-        rows = sheet.getRange(2, 1, dataRange.getNumRows() - 1, sheet.getLastColumn()).getValues();
-      }
-      diagInfo.rowCount = rows.length;
-      Logger.log("データ行数: " + rows.length);
-    } catch (dataErr) {
-      diagInfo.dataError = String(dataErr);
-      Logger.log("データ取得エラー: " + dataErr);
-      return Utils.createResponse({
-        ok: false,
-        err: 'データ取得エラー',
-        debug: debug ? diagInfo : undefined
-      });
-    }
+    const values = range.getValues();
+    if (debug) Logger.log("読み込み行数: " + values.length);
     
-    // データ処理とレスポンス作成
-    diagInfo.stage = 'data_processing';
     /** @type {KintaiRecord[]} */
-    const monthlyData = [];
-    
-    try {
-      // 対象年月
-      /** @type {number} */
-      const targetYear = parseInt(year, 10);
-      /** @type {number} */
-      const targetMonth = parseInt(month, 10);
+    const result = [];
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const dateVal = row[0];
+      const monthVal = row[1];
+      const startTimeVal = row[2];
+      const breakTimeVal = row[3];
+      const endTimeVal = row[4];
+      const workingTimeVal = row[5];
+      const locationVal = row[6];
       
-      // 各行をチェックして対象月のデータをフィルタリング
-      for (let i = 0; i < rows.length; i++) {
-        // 日付、ユーザーID等を取得
-        /** @type {any} */
-        let dateValue = rows[i][0]; // A列: 日付
-        /** @type {any} */
-        let monthValue = rows[i][1]; // B列: 月
-        /** @type {any} */
-        let startTimeValue = rows[i][2]; // C列: 出勤時間
-        /** @type {any} */
-        let breakTimeValue = rows[i][3]; // D列: 休憩時間
-        /** @type {any} */
-        let endTimeValue = rows[i][4]; // E列: 退勤時間
-        /** @type {any} */
-        let workingTimeValue = rows[i][5]; // F列: 勤務時間
-        /** @type {any} */
-        let locationValue = rows[i][6]; // G列: 勤務場所
-        
-        // デバッグ: スプレッドシートから取得した全ての列の値を確認
-        Logger.log(`[DEBUG] 行${i}: 日付=${dateValue}, 出勤=${startTimeValue}(${typeof startTimeValue}), 休憩=${breakTimeValue}(${typeof breakTimeValue}), 退勤=${endTimeValue}(${typeof endTimeValue}), 勤務=${workingTimeValue}(${typeof workingTimeValue}), 場所=${locationValue}(${typeof locationValue})`);
-        
-        // 空行やデータがない行はスキップ
-        if (!dateValue) {
-          continue;
-        }
-        
-        // 対象月をチェック
-        /** @type {boolean} */
-        let matchesMonth = false;
-        
-        // B列の月の値があれば直接チェック
-        if (monthValue && typeof monthValue === 'number') {
-          matchesMonth = (monthValue === targetMonth);
-        }
-        // B列がなければ日付から月を抽出
-        else {
-          /** @type {number} */
-          let extractedMonth = 0;
-          
-          // 日付の種類に応じた処理
-          if (dateValue instanceof Date) {
-            extractedMonth = dateValue.getMonth() + 1;
-          } else if (typeof dateValue === 'string') {
-            if (dateValue.includes('/')) {
-              const parts = dateValue.split('/');
-              if (parts.length > 1) {
-                extractedMonth = parseInt(parts[1], 10);
-              }
-            } else if (dateValue.includes('-')) {
-              const parts = dateValue.split('-');
-              if (parts.length > 1) {
-                extractedMonth = parseInt(parts[1], 10);
-              }
-            } else if (dateValue.match(/^\d{4}年\d{1,2}月\d{1,2}日/)) {
-              const match = dateValue.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
-              if (match) {
-                extractedMonth = parseInt(match[2], 10);
-              }
-            }
-          }
-          
-          matchesMonth = (extractedMonth === targetMonth);
-        }
-        
-        // 対象月と一致しない場合はスキップ
-        if (!matchesMonth) {
-          continue;
-        }
-        
-        // 対象年もチェック
-        /** @type {boolean} */
-        let matchesYear = false;
-        if (dateValue instanceof Date) {
-          matchesYear = (dateValue.getFullYear() === targetYear);
-        } else if (typeof dateValue === 'string') {
-          /** @type {number} */
-          let extractedYear = 0;
-          
-          if (dateValue.includes('/')) {
-            const parts = dateValue.split('/');
-            if (parts.length > 0) {
-              extractedYear = parseInt(parts[0], 10);
-            }
-          } else if (dateValue.includes('-')) {
-            const parts = dateValue.split('-');
-            if (parts.length > 0) {
-              extractedYear = parseInt(parts[0], 10);
-            }
-          } else if (dateValue.match(/^\d{4}年\d{1,2}月\d{1,2}日/)) {
-            const match = dateValue.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
-            if (match) {
-              extractedYear = parseInt(match[1], 10);
-            }
-          }
-          
-          matchesYear = (extractedYear === targetYear);
-        }
-        
-        // 対象年と一致しない場合はスキップ
-        if (!matchesYear) {
-          continue;
-        }
-        
-        // 日付を正規化
-        /** @type {string} */
-        let dateStr = '';
-        if (dateValue instanceof Date) {
-          const y = dateValue.getFullYear();
-          const m = (dateValue.getMonth() + 1).toString().padStart(2, '0');
-          const d = dateValue.getDate().toString().padStart(2, '0');
-          dateStr = `${y}-${m}-${d}`;
-        } else if (typeof dateValue === 'string') {
-          if (dateValue.includes('/')) {
-            const [year, month, day] = dateValue.split('/');
-            dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-          } else if (dateValue.includes('-')) {
-            dateStr = dateValue;
-          } else if (dateValue.match(/^\d{4}年\d{1,2}月\d{1,2}日/)) {
-            const match = dateValue.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
-            if (match) {
-              const [_, y, m, d] = match;
-              dateStr = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-            } else {
-              continue;
-            }
-          } else {
-            continue;
-          }
+      // 日付を文字列に変換
+      let dateStr = '';
+      if (dateVal instanceof Date) {
+        const y = dateVal.getFullYear();
+        const m = (dateVal.getMonth() + 1).toString().padStart(2, '0');
+        const d = dateVal.getDate().toString().padStart(2, '0');
+        dateStr = `${y}-${m}-${d}`;
+      } else if (typeof dateVal === 'string') {
+        const normalized = normalizeDate(dateVal);
+        const parts = normalized.split('/');
+        if (parts.length === 3) {
+          dateStr = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
         } else {
-          continue;
+          dateStr = normalized;
         }
-
-        // startTime, endTime を "HH:mm" 形式の文字列に変換
-        /** @type {string} */
-        let formattedStartTime = '';
-        if (startTimeValue instanceof Date) {
-          formattedStartTime = Utilities.formatDate(startTimeValue, Session.getScriptTimeZone(), "HH:mm");
-        } else if (typeof startTimeValue === 'string' && startTimeValue.match(/^\d{1,2}:\d{2}/)) {
-          formattedStartTime = startTimeValue.split(':')[0].padStart(2,'0') + ':' + startTimeValue.split(':')[1].padStart(2,'0'); // "8:00" -> "08:00"
-        } else if (typeof startTimeValue === 'number') { // シリアル値の場合 (例: 0.3333... -> 8:00)
-           // Google Sheetsの時刻シリアル値は1日を1とする数値。0.5は12:00。
-           // これをDateオブジェクトに変換してフォーマットする。
-           // 基準日を1899/12/30 00:00:00 とすることが多い。
-           const baseDate = new Date(1899, 11, 30, 0, 0, 0); // Month is 0-indexed
-           const dateFromSerial = new Date(baseDate.getTime() + startTimeValue * 24 * 60 * 60 * 1000);
-           formattedStartTime = Utilities.formatDate(dateFromSerial, Session.getScriptTimeZone(), "HH:mm");
-        }
-
-
-        /** @type {string} */
-        let formattedEndTime = '';
-        if (endTimeValue instanceof Date) {
-          formattedEndTime = Utilities.formatDate(endTimeValue, Session.getScriptTimeZone(), "HH:mm");
-        } else if (typeof endTimeValue === 'string' && endTimeValue.match(/^\d{1,2}:\d{2}/)) {
-          formattedEndTime = endTimeValue.split(':')[0].padStart(2,'0') + ':' + endTimeValue.split(':')[1].padStart(2,'0');
-        } else if (typeof endTimeValue === 'number') {
-           const baseDate = new Date(1899, 11, 30, 0, 0, 0);
-           const dateFromSerial = new Date(baseDate.getTime() + endTimeValue * 24 * 60 * 60 * 1000);
-           formattedEndTime = Utilities.formatDate(dateFromSerial, Session.getScriptTimeZone(), "HH:mm");
-        }
-
-        // 休憩時間の処理（文字列として統一）
-        let finalBreakTime = "00:00"; // デフォルト値
-        if (breakTimeValue instanceof Date) {
-          // Date型の場合は時:分形式の文字列に変換
-          const hours = breakTimeValue.getHours();
-          const minutes = breakTimeValue.getMinutes();
-          finalBreakTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        } else if (breakTimeValue && typeof breakTimeValue === 'string') {
-          // 文字列の場合はHH:mm形式に正規化
-          if (breakTimeValue.includes(':')) {
-            const [hours, minutes] = breakTimeValue.split(':');
-            finalBreakTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
-          }
-        }
-        
-        // 勤務時間の処理
-        let finalWorkingTime;
-        if (workingTimeValue instanceof Date) {
-          const hours = workingTimeValue.getHours();
-          const minutes = workingTimeValue.getMinutes();
-          finalWorkingTime = `${hours}:${minutes.toString().padStart(2, '0')}`;
-        } else {
-          finalWorkingTime = workingTimeValue || '';
-        }
-        
-        // デバッグ: スプレッドシートから取得した勤務時間の値を確認
-        Logger.log(`[DEBUG] 行${i}: workingTimeValue = ${workingTimeValue}, type = ${typeof workingTimeValue}`);
-        
-        // スプレッドシートのデータをそのまま出力
-        monthlyData.push({
-          date: dateStr,
-          startTime: formattedStartTime,
-          endTime: formattedEndTime,
-          breakTime: finalBreakTime, // スプレッドシートの値をそのまま
-          workingTime: finalWorkingTime, // スプレッドシートの値をそのまま
-          location: locationValue || ''
-        });
+      } else {
+        dateStr = String(dateVal);
       }
       
-      diagInfo.dataCount = monthlyData.length;
-      Logger.log(`${targetYear}年${targetMonth}月のデータ: ${monthlyData.length}件`);
+      // 月の値を数値に変換
+      let monthNum = 0;
+      if (typeof monthVal === 'number') {
+        monthNum = monthVal;
+      } else if (typeof monthVal === 'string') {
+        const m = parseInt(monthVal, 10);
+        monthNum = isNaN(m) ? 0 : m;
+      }
       
-      // 正常レスポンス
-      return Utils.createResponse({
-        ok: true,
-        data: monthlyData,
-        debug: debug ? diagInfo : undefined
-      });
-    } catch (dataErr) {
-      diagInfo.dataProcessingError = String(dataErr);
-      Logger.log(`データ処理エラー: ${dataErr}`);
-      return Utils.createResponse({
-        ok: false,
-        err: 'データ処理エラー',
-        debug: debug ? diagInfo : undefined
+      // レコード作成
+      result.push({
+        date: dateStr,
+        month: monthNum,
+        startTime: String(startTimeVal || ''),
+        breakTime: String(breakTimeVal || ''),
+        endTime: String(endTimeVal || ''),
+        workingTime: String(workingTimeVal || ''),
+        location: String(locationVal || '')
       });
     }
+    
+    // 指定年月でフィルタ
+    const filtered = result.filter(r => {
+      if (!r.date || r.date.length < 7) return false;
+      const [y, m] = r.date.split('-');
+      return parseInt(y,10) === year && parseInt(m,10) === month;
+    });
+    
+    return Utils.createResponse({
+      ok: true,
+      data: filtered,
+      debug: debug ? diagInfo : undefined
+    });
   } catch (e) {
     diagInfo.error = String(e);
-    Logger.log("月間データ取得エラー: " + e);
     return Utils.createResponse({
       ok: false,
-      err: '月間データ取得処理エラー',
+      err: '月間勤怠データ取得エラー',
       debug: debug ? diagInfo : undefined
     });
   }

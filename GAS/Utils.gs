@@ -26,14 +26,7 @@ Utils.createResponse = function(obj) {
       .createTextOutput(jsonString)
       .setMimeType(ContentService.MimeType.JSON);
     
-    // CORSヘッダーを追加
-    output.setHeaders({
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400'
-    });
-    
+    // CORSヘッダー設定はContentServiceでは不可のため削除
     return output;
   } catch (jsonErr) {
     // JSON変換エラーのフォールバック
@@ -45,14 +38,7 @@ Utils.createResponse = function(obj) {
       }))
       .setMimeType(ContentService.MimeType.JSON);
     
-    // フォールバック時もCORSヘッダーを追加
-    fallbackOutput.setHeaders({
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400'
-    });
-    
+    // CORSヘッダー設定はContentServiceでは不可のため削除
     return fallbackOutput;
   }
 };

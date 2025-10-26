@@ -5,6 +5,7 @@
  */
 import React, { useState } from "react";
 import { useKintai } from "../contexts/KintaiContext";
+import LoadingModal from "./LoadingModal";
 
 const MonthlyView: React.FC = () => {
   const {
@@ -464,12 +465,12 @@ const MonthlyView: React.FC = () => {
 
       {/* ローディングオーバーレイ */}
       {(isDataLoading || isRefreshing) && (
-        <div className="loading-overlay">
-          <div className="loading-spinner" />
-          <div className="loading-text">
-            データを読み込み中... / Loading data...
-          </div>
-        </div>
+        <LoadingModal
+          isOpen={true}
+          isLoading={true}
+          message="データを読み込み中... / Loading data..."
+          subMessage={isRefreshing ? "更新中です" : "月次データ取得中"}
+        />
       )}
     </div>
   );

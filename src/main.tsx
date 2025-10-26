@@ -4,6 +4,17 @@ import App from "./App.tsx";
 import "./styles.css";
 import "./styles_monthly.css"; // 月次ビュー用のスタイルを明示的にインポート
 
+// VisualViewport fallback: expose dynamic viewport height as CSS var (--vvh)
+const applyViewportHeightVar = () => {
+  const h = (window.visualViewport?.height ?? window.innerHeight);
+  document.documentElement.style.setProperty('--vvh', `${Math.round(h)}px`);
+};
+// initialize and bind updates
+applyViewportHeightVar();
+window.visualViewport?.addEventListener('resize', applyViewportHeightVar);
+window.visualViewport?.addEventListener('scroll', applyViewportHeightVar);
+window.addEventListener('resize', applyViewportHeightVar);
+
 // Service Worker登録とバージョン管理
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {

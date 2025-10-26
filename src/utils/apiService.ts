@@ -354,13 +354,87 @@ export async function getMonthlyData(
     true,
   );
 
-  // デバッグ: GASからのレスポンスを確認
-  // GASからのレスポンス受信
+  // 正規化ヘルパー
+  const normalizeBreak = (bt: any): string => {
+    if (bt === undefined || bt === null || bt === "") return "00:00";
+    if (typeof bt === "string") {
+      const m = bt.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+      if (m) return `${m[1].padStart(2, "0")}:${m[2].padStart(2, "0")}`;
+      const asNum = parseInt(bt, 10);
+      if (!Number.isNaN(asNum) && asNum >= 0) {
+        const h = Math.floor(asNum / 60);
+        const mm = asNum % 60;
+        return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      }
+      // 文字列中のHH:mm抽出
+      const anyM = bt.match(/(\d{1,2}):(\d{2})/);
+      if (anyM) return `${anyM[1].padStart(2, "0")}:${anyM[2].padStart(2, "0")}`;
+      return "00:00";
+    }
+    if (typeof bt === "number" && bt >= 0) {
+      const h = Math.floor(bt / 60);
+      const mm = bt % 60;
+      return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+    }
+    return "00:00";
+  };
+
+  const normalizeWork = (wt: any): string => {
+    if (!wt) return "";
+    if (typeof wt === "string") {
+      // 既にHH:mm
+      const hhmm = wt.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+      if (hhmm) return `${hhmm[1].padStart(2, "0")}:${hhmm[2].padStart(2, "0")}`;
+      // ISO(T/Z)
+      if (wt.includes("T") && wt.includes("Z")) {
+        const d = new Date(wt);
+        if (!Number.isNaN(d.getTime())) {
+          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        }
+      }
+      // 8.5h / 8h
+      const hourMatch = wt.match(/^(\d+)(?:\.(\d+))?h?$/);
+      if (hourMatch) {
+        const h = parseInt(hourMatch[1], 10);
+        const dec = hourMatch[2] ? parseFloat(`0.${hourMatch[2]}`) : 0;
+        const total = h * 60 + Math.round(dec * 60);
+        const hh = Math.floor(total / 60);
+        const mm = total % 60;
+        return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      }
+      // 数値文字列（分）
+      const asNum = parseInt(wt, 10);
+      if (!Number.isNaN(asNum) && asNum >= 0) {
+        const hh = Math.floor(asNum / 60);
+        const mm = asNum % 60;
+        return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      }
+      // 任意の文字列からHH:mm抽出
+      const anyM = wt.match(/(\d{1,2}):(\d{2})/);
+      if (anyM) return `${anyM[1].padStart(2, "0")}:${anyM[2].padStart(2, "0")}`;
+      return wt;
+    }
+    if (typeof wt === "number" && wt >= 0) {
+      const hh = Math.floor(wt / 60);
+      const mm = wt % 60;
+      return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+    }
+    return "";
+  };
+
+  const raw = (r.data as KintaiRecord[]) || [];
+  const normalized = raw.map((rec) => ({
+    ...rec,
+    startTime: extractHHMM(rec.startTime),
+    endTime: extractHHMM(rec.endTime),
+    breakTime: normalizeBreak(rec.breakTime),
+    workingTime: normalizeWork(rec.workingTime),
+  }));
 
   // キャッシュに保存
-  saveMonthlyDataToCache(cacheKey, r.data as KintaiRecord[]);
+  saveMonthlyDataToCache(cacheKey, normalized);
 
-  return r.data as KintaiRecord[];
+  return normalized;
 }
 
 /* ========= 月間データキャッシュユーティリティ ========= */
@@ -447,42 +521,100 @@ export function clearMonthlyDataCache(): void {
  *  - 勤務場所対応追加
  *  ──────────────────────────────────────────────────────────
  */
-// ... existing code ...
+export async function getJobWageOptionsFromCsv(): Promise<Array<{ job: string; wage: number | null }>> {
+  const cacheKey = "job_wage_options";
+  const tsKey = "job_wage_options_ts";
+  const ttlMs = 30 * 60 * 1000; // 30分
 
+  // キャッシュ確認
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    const tsRaw = sessionStorage.getItem(tsKey);
+    if (cached && tsRaw) {
+      const ts = parseInt(tsRaw, 10);
+      if (!Number.isNaN(ts) && Date.now() - ts < ttlMs) {
+        return JSON.parse(cached);
+      }
+    }
+  } catch {}
+
+  // CSV公開URL（環境変数優先、未設定なら安全に既定URLを使用）
+  const fallbackUrl =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTMitO8OL_jLUXrm6etS4CRtg6TZsnGmpLoyxwkedI50wMwnat0l3H_8EQWDno8UIMT0tHYkzmz0cSq/pub?gid=55512795&single=true&output=csv";
+  const csvUrl = (import.meta.env.VITE_CSV_LOCATION_URL as string | undefined) || fallbackUrl;
+
+  try {
+    // 開発・本番ともにフロントから直接取得
+    const res = await fetchWithRetry(csvUrl, { method: "GET" }, 2, 8000);
+    if (!res.ok) return [];
+    const text = await res.text();
+
+    // CSVパース
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const data: Array<{ job: string; wage: number | null }> = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      // 先頭行がヘッダならスキップ（例: 仕事内容,時給）
+      if (i === 0 && /仕事内容/i.test(line) && /時給/i.test(line)) continue;
+      const parts = line.split(",").map((s) => s.trim());
+      const job = parts[0] || "";
+      const wageStr = parts[1] || "";
+      const wageNum = wageStr ? Number(wageStr) : NaN;
+      const wage = Number.isFinite(wageNum) ? wageNum : null;
+      if (job) {
+        data.push({ job, wage });
+      }
+    }
+
+    // キャッシュ保存
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify(data));
+      sessionStorage.setItem(tsKey, String(Date.now()));
+    } catch {}
+
+    return data;
+  } catch {
+    return [];
+  }
+}
 // ISO日付文字列やDateオブジェクトから "HH:mm" 形式を抽出するヘルパー
 function extractHHMM(timeValue: string | Date | undefined): string {
-  // 空文字や未定義の値は空文字を返す（00:00ではなく）
-  if (
-    !timeValue ||
-    (typeof timeValue === "string" && timeValue.trim() === "")
-  ) {
+  if (!timeValue || (typeof timeValue === "string" && timeValue.trim() === "")) {
     return "";
   }
 
-  try {
-    const date = new Date(timeValue); // 文字列でもDateオブジェクトでも対応
-    const hours = date.getUTCHours().toString().padStart(2, "0"); // スプレッドシートの時刻はUTCとして解釈される場合がある
-    const minutes = date.getUTCMinutes().toString().padStart(2, "0");
-    if (
-      Number.isNaN(parseInt(hours, 10)) ||
-      Number.isNaN(parseInt(minutes, 10))
-    ) {
-      // もしパースに失敗したら、文字列からの直接抽出を試みる
-      if (typeof timeValue === "string") {
-        const match = timeValue.match(/(\d{2}):(\d{2})/);
-        if (match && match.length > 2) return `${match[1]}:${match[2]}`;
-      }
-      return ""; // それでもダメなら空文字
+  // 既にHH:mm / HH:mm:ss形式の文字列なら正規化して返す
+  if (typeof timeValue === "string") {
+    const hhmmss = timeValue.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (hhmmss) {
+      const h = hhmmss[1].padStart(2, "0");
+      const m = hhmmss[2].padStart(2, "0");
+      return `${h}:${m}`;
     }
-    return `${hours}:${minutes}`;
-  } catch (e) {
-    // 解析失敗時は空文字列を返す
-    return ""; // パース失敗時のフォールバック
   }
-}
 
-/* ========= getKintaiDataByDate ========= */
-// この関数は廃止予定 - KintaiContextのmonthlyDataを直接使用することを推奨
+  try {
+    const date = new Date(timeValue as any);
+    // Dateが有効ならローカル時刻で抽出（JSTなどタイムゾーンを考慮）
+    if (!Number.isNaN(date.getTime())) {
+      const hours = date.getHours().toString().padStart(2, "0");
+      const minutes = date.getMinutes().toString().padStart(2, "0");
+      return `${hours}:${minutes}`;
+    }
+  } catch {}
+
+  // Dateが無効な場合、文字列中のHH:mmを抽出（例: "Sat Dec 30 1899 07:30:00 GMT+0900 ..."）
+  if (typeof timeValue === "string") {
+    const match = timeValue.match(/(\d{1,2}):(\d{2})/);
+    if (match && match.length >= 3) {
+      const h = match[1].padStart(2, "0");
+      const m = match[2].padStart(2, "0");
+      return `${h}:${m}`;
+    }
+  }
+
+  return "";
+}
 export async function getKintaiDataByDate(
   dateString: string,
 ): Promise<KintaiData | null> {
