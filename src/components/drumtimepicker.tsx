@@ -34,7 +34,7 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
 
   const getOptionElements = () =>
     (containerRef.current?.querySelectorAll(
-      ".drum-picker-option"
+      ".drum-picker-option",
     ) as NodeListOf<HTMLElement>) || null;
 
   const scrollToIndex = useCallback((index: number, smooth = false) => {
@@ -105,7 +105,7 @@ const DrumPickerItem: React.FC<DrumPickerItemProps> = ({
         clearTimeout(scrollTimeoutRef.current);
       }
     },
-    []
+    [],
   );
 
   const handleItemClick = (option: string, index: number) => {
@@ -155,10 +155,10 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
 
   // Generate options
   const hourOptions = Array.from({ length: 24 }, (_, i) =>
-    String(i).padStart(2, "0")
+    String(i).padStart(2, "0"),
   );
   const minuteOptions = Array.from({ length: 12 }, (_, i) =>
-    String(i * 5).padStart(2, "0")
+    String(i * 5).padStart(2, "0"),
   );
 
   // 初期値の設定はhandleOpenでモーダル表示前に同期的に行う
@@ -206,7 +206,9 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
         onClick={handleOpen}
         disabled={disabled}
       >
-        <span className="drum-time-picker-value">{value || "未入力 / Not entered"}</span>
+        <span className="drum-time-picker-value">
+          {value || "未入力 / Not entered"}
+        </span>
         <span className="drum-time-picker-icon">🕐</span>
       </button>
 
@@ -235,7 +237,9 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
                 </div>
                 <div className="drum-time-picker-separator">:</div>
                 <div className="drum-time-picker-column">
-                  <div className="drum-time-picker-column-label">分 / Minute</div>
+                  <div className="drum-time-picker-column-label">
+                    分 / Minute
+                  </div>
                   <DrumPickerItem
                     options={minuteOptions}
                     value={draftMinute}

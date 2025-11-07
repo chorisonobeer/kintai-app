@@ -22,7 +22,9 @@ const LoadingModal: React.FC<LoadingModalProps> = ({
         <div className="modal-header">
           <h3>{isLoading ? "読み込み中 / Loading" : "書き込み中 / Writing"}</h3>
           {/* モーダルはブロッキング用途のため閉じるボタンは非表示 */}
-          <button className="modal-close" style={{ visibility: "hidden" }}>×</button>
+          <button className="modal-close" style={{ visibility: "hidden" }}>
+            ×
+          </button>
         </div>
         <div className="modal-body" style={{ textAlign: "center" }}>
           <div className="loading-spinner" style={{ margin: "12px auto" }} />

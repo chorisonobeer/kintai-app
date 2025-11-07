@@ -6,60 +6,27 @@ import "./styles_monthly.css"; // 月次ビュー用のスタイルを明示的�
 
 // VisualViewport fallback: expose dynamic viewport height as CSS var (--vvh)
 const applyViewportHeightVar = () => {
-  const h = (window.visualViewport?.height ?? window.innerHeight);
-  document.documentElement.style.setProperty('--vvh', `${Math.round(h)}px`);
+  const h = window.visualViewport?.height ?? window.innerHeight;
+  document.documentElement.style.setProperty("--vvh", `${Math.round(h)}px`);
 };
 // initialize and bind updates
 applyViewportHeightVar();
-window.visualViewport?.addEventListener('resize', applyViewportHeightVar);
-window.visualViewport?.addEventListener('scroll', applyViewportHeightVar);
-window.addEventListener('resize', applyViewportHeightVar);
+window.visualViewport?.addEventListener("resize", applyViewportHeightVar);
+window.visualViewport?.addEventListener("scroll", applyViewportHeightVar);
+window.addEventListener("resize", applyViewportHeightVar);
 
-// Service Worker登録とバージョン管理
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('Service Worker registered:', registration);
-      
-      // Service Workerからのメッセージを監視
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        const { type, version } = event.data;
-        
-        if (type === 'NEW_VERSION_AVAILABLE') {
-          console.log('New version available:', version);
-          
-          // ユーザーに更新を通知
-          // ...
-          if (confirm('新しいバージョンが利用可能です。ページを更新しますか？ / A new version is available. Refresh the page?')) {
-          window.location.reload();
-          }
-        }
-      });
-      
-      // バックグラウンド同期を登録
-      if (registration.active) {
-        registration.active.postMessage({
-          type: 'REGISTER_SYNC'
-        });
-      }
-      
-    } catch (error) {
-      console.error('Service Worker registration failed:', error);
-    }
-  });
-}
+// Service Workerの詳細な登録・更新フローはApp側で管理します
 
 // ページの可視性変更時にバージョンチェックを実行
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && 'serviceWorker' in navigator) {
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && "serviceWorker" in navigator) {
     // ページがアクティブになった時にバージョンチェックを強制実行
-    fetch('/version.json?t=' + Date.now(), {
-      cache: 'no-cache',
+    fetch("/version.json?t=" + Date.now(), {
+      cache: "no-cache",
       headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
     }).catch(() => {
       // エラーは無視（オフライン時など）
     });

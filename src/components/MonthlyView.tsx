@@ -224,7 +224,7 @@ const MonthlyView: React.FC = () => {
    * 数値（分）、文字列（HH:mm）、undefined/null に対応
    */
   const formatBreakTime = (
-    breakTime: number | string | undefined | null
+    breakTime: number | string | undefined | null,
   ): string => {
     // undefinedやnullの場合は空文字を返す
     if (breakTime === undefined || breakTime === null) return "";

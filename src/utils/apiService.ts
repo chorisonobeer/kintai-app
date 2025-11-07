@@ -368,7 +368,8 @@ export async function getMonthlyData(
       }
       // 文字列中のHH:mm抽出
       const anyM = bt.match(/(\d{1,2}):(\d{2})/);
-      if (anyM) return `${anyM[1].padStart(2, "0")}:${anyM[2].padStart(2, "0")}`;
+      if (anyM)
+        return `${anyM[1].padStart(2, "0")}:${anyM[2].padStart(2, "0")}`;
       return "00:00";
     }
     if (typeof bt === "number" && bt >= 0) {
@@ -384,7 +385,8 @@ export async function getMonthlyData(
     if (typeof wt === "string") {
       // 既にHH:mm
       const hhmm = wt.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-      if (hhmm) return `${hhmm[1].padStart(2, "0")}:${hhmm[2].padStart(2, "0")}`;
+      if (hhmm)
+        return `${hhmm[1].padStart(2, "0")}:${hhmm[2].padStart(2, "0")}`;
       // ISO(T/Z)
       if (wt.includes("T") && wt.includes("Z")) {
         const d = new Date(wt);
@@ -411,7 +413,8 @@ export async function getMonthlyData(
       }
       // 任意の文字列からHH:mm抽出
       const anyM = wt.match(/(\d{1,2}):(\d{2})/);
-      if (anyM) return `${anyM[1].padStart(2, "0")}:${anyM[2].padStart(2, "0")}`;
+      if (anyM)
+        return `${anyM[1].padStart(2, "0")}:${anyM[2].padStart(2, "0")}`;
       return wt;
     }
     if (typeof wt === "number" && wt >= 0) {
@@ -521,7 +524,9 @@ export function clearMonthlyDataCache(): void {
  *  - 勤務場所対応追加
  *  ──────────────────────────────────────────────────────────
  */
-export async function getJobWageOptionsFromCsv(): Promise<Array<{ job: string; wage: number | null }>> {
+export async function getJobWageOptionsFromCsv(): Promise<
+  Array<{ job: string; wage: number | null }>
+> {
   const cacheKey = "job_wage_options";
   const tsKey = "job_wage_options_ts";
   const ttlMs = 30 * 60 * 1000; // 30分
@@ -541,7 +546,9 @@ export async function getJobWageOptionsFromCsv(): Promise<Array<{ job: string; w
   // CSV公開URL（環境変数優先、未設定なら安全に既定URLを使用）
   const fallbackUrl =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vTMitO8OL_jLUXrm6etS4CRtg6TZsnGmpLoyxwkedI50wMwnat0l3H_8EQWDno8UIMT0tHYkzmz0cSq/pub?gid=55512795&single=true&output=csv";
-  const csvUrl = (import.meta.env.VITE_CSV_LOCATION_URL as string | undefined) || fallbackUrl;
+  const csvUrl =
+    (import.meta.env.VITE_CSV_LOCATION_URL as string | undefined) ||
+    fallbackUrl;
 
   try {
     // 開発・本番ともにフロントから直接取得
@@ -579,7 +586,10 @@ export async function getJobWageOptionsFromCsv(): Promise<Array<{ job: string; w
 }
 // ISO日付文字列やDateオブジェクトから "HH:mm" 形式を抽出するヘルパー
 function extractHHMM(timeValue: string | Date | undefined): string {
-  if (!timeValue || (typeof timeValue === "string" && timeValue.trim() === "")) {
+  if (
+    !timeValue ||
+    (typeof timeValue === "string" && timeValue.trim() === "")
+  ) {
     return "";
   }
 

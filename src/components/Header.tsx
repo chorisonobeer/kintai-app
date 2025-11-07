@@ -16,13 +16,17 @@ interface HeaderProps {
   isVersionUpdating?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, isVersionUpdating = false }) => {
+const Header: React.FC<HeaderProps> = ({
+  onLogout,
+  versionUpdateProgress = 0,
+  isVersionUpdating = false,
+}) => {
   const location = useLocation();
   const userName = getUserName();
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showDeployInfoModal, setShowDeployInfoModal] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
-    null
+    null,
   );
   const [longPressProgress, setLongPressProgress] = useState(0);
   const [isLongPressing, setIsLongPressing] = useState(false);
@@ -76,7 +80,9 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
     if (location.pathname !== "/") return; // 日次画面のみ
     try {
       const reg = await navigator.serviceWorker.getRegistration();
-      try { await reg?.update(); } catch {}
+      try {
+        await reg?.update();
+      } catch {}
       if (reg?.active) {
         reg.active.postMessage({ type: "CHECK_FOR_UPDATES" });
       }
@@ -87,8 +93,14 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
       });
       if (resp.ok) {
         const server = await resp.json();
-        const clientBuildTime = import.meta.env.VITE_BUILD_TIME as string | undefined;
-        if (clientBuildTime && server?.buildTime && server.buildTime !== clientBuildTime) {
+        const clientBuildTime = import.meta.env.VITE_BUILD_TIME as
+          | string
+          | undefined;
+        if (
+          clientBuildTime &&
+          server?.buildTime &&
+          server.buildTime !== clientBuildTime
+        ) {
           window.location.reload();
           return;
         }
@@ -123,7 +135,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout, versionUpdateProgress = 0, is
     <div className="app-header">
       {isVersionUpdating && (
         <div className="version-update-progress-bar">
-          <div 
+          <div
             className="version-update-progress-fill"
             style={{ width: `${versionUpdateProgress}%` }}
           />

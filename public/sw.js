@@ -40,7 +40,7 @@ async function checkForUpdates() {
     });
 
     if (!response.ok) {
-      return false;
+      return { status: 'error' };
     }
 
     const versionData = await response.json();
@@ -49,38 +49,13 @@ async function checkForUpdates() {
 
     // 初回または新バージョン検出
     if (!storedVersion || (storedVersionData && versionData.buildTime !== storedVersionData.buildTime)) {
-      console.log('New version detected, clearing cache');
-
-      // 進捗開始通知（任意）
-      self.clients.matchAll().then(clients => {
-        clients.forEach(client => client.postMessage({ type: 'VERSION_UPDATE_START' }));
-      });
-
-      const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.map(name => caches.delete(name)));
-
-      // 新しいversion.jsonを保存
-      const cache = await caches.open(CACHE_NAME);
-      await cache.put('/version.json', new Response(JSON.stringify(versionData), {
-        headers: { 'Content-Type': 'application/json' }
-      }));
-
-      // 完了通知（App側でリロード）
-      const clients = await self.clients.matchAll();
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'NEW_VERSION_AVAILABLE',
-          version: versionData
-        });
-      });
-
-      return true;
+      return { status: 'update_available', version: versionData };
     }
 
-    return false;
+    return { status: 'latest', version: storedVersionData || versionData };
   } catch (error) {
     console.error('Version check failed:', error);
-    return false;
+    return { status: 'error' };
   }
 }
 
@@ -95,7 +70,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.destination === 'document') {
     event.respondWith(
       (async () => {
-        await checkForUpdates();
+        // 起動時の手動チェックに委ねる（ここではバージョンチェックを実行しない）
         try {
           const network = await fetch(event.request, { cache: 'no-store' });
           // 最新をキャッシュへ保存（失敗は無視）
@@ -268,13 +243,35 @@ self.addEventListener('message', (event) => {
       break;
 
     case 'CHECK_FOR_UPDATES':
-      // 手動更新チェック要求
+      // 手動更新チェック要求（起動時のみ）
       (async () => {
-        const updated = await checkForUpdates();
-        if (!updated) {
-          // 最新の場合は通知
+        const result = await checkForUpdates();
+        const clients = await self.clients.matchAll();
+        clients.forEach(client => client.postMessage({ type: 'VERSION_CHECK_RESULT', result }));
+      })();
+      break;
+
+    case 'APPLY_UPDATE':
+      // 新バージョン適用（キャッシュ更新のみ、リロードはApp側で制御）
+      (async () => {
+        try {
+          const now = Date.now();
+          const response = await fetch('/version.json?t=' + now, { cache: 'no-cache' });
+          const versionData = await response.json();
+
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
+
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put('/version.json', new Response(JSON.stringify(versionData), {
+            headers: { 'Content-Type': 'application/json' }
+          }));
+
           const clients = await self.clients.matchAll();
-          clients.forEach(client => client.postMessage({ type: 'VERSION_LATEST' }));
+          clients.forEach(client => client.postMessage({ type: 'UPDATE_APPLIED', version: versionData }));
+        } catch (e) {
+          const clients = await self.clients.matchAll();
+          clients.forEach(client => client.postMessage({ type: 'UPDATE_FAILED' }));
         }
       })();
       break;

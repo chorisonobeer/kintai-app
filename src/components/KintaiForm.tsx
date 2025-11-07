@@ -1,7 +1,7 @@
 /**
  * /src/components/KintaiForm.tsx
- * 2025-01-27T10:00+09:00
- * 変更概要: 勤務時間の自動計算機能を追加 - 出勤時間、退勤時間、休憩時間から勤務時間を計算してリアルタイム表示
+ * 2025-11-07T10:30+09:00
+ * 変更概要: 月跨ぎ判定順序の是正（API直接取得へ簡素化）、SW登録一元化準備
  */
 import React, {
   useState,
@@ -29,7 +29,12 @@ import {
   getSelectableDates,
   EDITABLE_DAYS,
 } from "../utils/dateUtils";
-import { saveKintaiToServer, isAuthenticated, getJobWageOptionsFromCsv } from "../utils/apiService";
+import {
+  saveKintaiToServer,
+  isAuthenticated,
+  getJobWageOptionsFromCsv,
+  getKintaiDataByDate as getKintaiDataByDateApi,
+} from "../utils/apiService";
 import { useKintai } from "../contexts/KintaiContext";
 import LoadingModal from "./LoadingModal";
 
@@ -48,7 +53,7 @@ const initialState: KintaiFormState = {
 // 編集アクション処理用reducer
 const editReducer = (
   state: KintaiFormState,
-  action: { type: EditActionType; payload?: any }
+  action: { type: EditActionType; payload?: any },
 ): KintaiFormState => {
   switch (action.type) {
     case EditActionType.TOUCH_START:
@@ -92,6 +97,11 @@ const editReducer = (
         ...state,
         isSaved: action.payload,
       };
+    case EditActionType.START_EDITING:
+      return {
+        ...state,
+        isEditing: true,
+      };
     default:
       return state;
   }
@@ -101,7 +111,7 @@ const editReducer = (
 const calculateWorkingTime = (
   startTime: string,
   endTime: string,
-  breakTime: string
+  breakTime: string,
 ): string => {
   // 入力値が不完全な場合は空文字を返す
   if (!startTime || !endTime) {
@@ -111,7 +121,7 @@ const calculateWorkingTime = (
   try {
     // 時間文字列をパース
     const parseTime = (
-      timeStr: string
+      timeStr: string,
     ): { hours: number; minutes: number } | null => {
       const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
       if (!match) return null;
@@ -168,16 +178,7 @@ const calculateWorkingTime = (
 
 const KintaiForm: React.FC = () => {
   const navigate = useNavigate();
-  const {
-    getKintaiDataByDate,
-    refreshData,
-    compareLogics,
-    monthlyData,
-    currentYear,
-    currentMonth,
-    isDateEntered,
-    isDateEnteredNew,
-  } = useKintai();
+  const { refreshData } = useKintai();
 
   // ユーザー認証チェック
   useEffect(() => {
@@ -200,10 +201,15 @@ const KintaiForm: React.FC = () => {
   const [location, setLocation] = useState(initialState.location);
   const [workingTime, setWorkingTime] = useState(""); // 勤務時間の状態を追加
   const [errors, setErrors] = useState<ValidationErrors>({});
-  const [jobOptions, setJobOptions] = useState<Array<{ job: string; wage: number | null }>>([]);
+  const [jobOptions, setJobOptions] = useState<
+    Array<{ job: string; wage: number | null }>
+  >([]);
 
   // ローディング状態を管理
   const [isDataLoading, setIsDataLoading] = useState(false);
+  // 入力変更検知用のdirtyフラグ（レンダリング最小化のためref管理）
+  const isDirtyRef = useRef(false);
+  const prevDateRef = useRef<string>(initialState.date);
 
   // 削除確認モーダルの状態
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -213,7 +219,7 @@ const KintaiForm: React.FC = () => {
    * 数値（分）、文字列（HH:mm）、undefined/null に対応
    */
   const formatBreakTime = (
-    breakTime: number | string | undefined | null
+    breakTime: number | string | undefined | null,
   ): string => {
     // undefinedやnullの場合は空文字を返す（未入力状態）
     if (breakTime === undefined || breakTime === null) return "";
@@ -271,7 +277,7 @@ const KintaiForm: React.FC = () => {
     const calculatedWorkingTime = calculateWorkingTime(
       startTime,
       endTime,
-      breakTime
+      breakTime,
     );
     setWorkingTime(calculatedWorkingTime);
   }, [startTime, endTime, breakTime]);
@@ -290,13 +296,20 @@ const KintaiForm: React.FC = () => {
 
   // 日付変更時（React 18の並行機能を使用）
   useEffect(() => {
+    // 同一日・編集中またはdirtyの場合はロード処理を抑止
+    if (
+      prevDateRef.current === deferredDate &&
+      (formState.isEditing || isDirtyRef.current)
+    ) {
+      return;
+    }
     const loadDateInfo = async () => {
       // UIの応答性を保つため、重い処理をstartTransitionで包む
       startTransition(() => {
         setIsDataLoading(true);
         setErrors({}); // 日付変更時にエラーをリセット
 
-        // 編集中でない場合のみ状態をリセット（入力データ消失を防ぐ）
+        // 初期化条件を緩和: 編集中でない場合は必ず状態をリセット
         if (!formState.isEditing) {
           setStartTime(initialState.startTime);
           setBreakTime(initialState.breakTime);
@@ -308,60 +321,37 @@ const KintaiForm: React.FC = () => {
       });
 
       try {
-        // 瞬時判定: 既存のmonthlyDataから直接判定を実行
-        const comparison = compareLogics(new Date(deferredDate));
-        const entered = comparison.legacy; // 現在は既存ロジックを使用
+        // 月跨ぎ判定を排し、対象日付のデータ存在をAPIで直接確認
+        const data = await getKintaiDataByDateApi(deferredDate);
 
-        // 保存ボタン押下時のみデータ更新を行うため、ここでのrefreshDataは削除
+        if (data) {
+          const hasStartTime = data.startTime && data.startTime.trim() !== "";
+          const breakTimeAsString = formatBreakTime(data.breakTime);
 
-        // 開発環境でのみ比較結果をログ出力
-        if (process.env.NODE_ENV === "development" && !comparison.match) {
-          // 入力判定ロジック比較結果
-        }
-
-        // 今月の勤怠データを確認
-
-        // データ入力判定テーブルを確認
-
-        if (entered) {
-          const data = getKintaiDataByDate(deferredDate);
-
-          if (data) {
-            // 出勤時間が入力されている場合のみ保存済みとして扱う
-            const hasStartTime = data.startTime && data.startTime.trim() !== "";
-
-            // 状態を一括で更新してレンダリング回数を最小化
-            const breakTimeAsString = formatBreakTime(data.breakTime);
-
-            // React 18のバッチング機能を活用して状態更新を一括処理
-            startTransition(() => {
-              setStartTime(
-                data.startTime !== undefined
-                  ? data.startTime
-                  : initialState.startTime
-              );
-              setBreakTime(breakTimeAsString);
-              setEndTime(
-                data.endTime !== undefined ? data.endTime : initialState.endTime
-              );
-              setLocation(
-                data.location !== undefined
-                  ? data.location
-                  : initialState.location
-              );
-              setWorkingTime(data.workingTime || "");
-              dispatch({
-                type: EditActionType.CHECK_SAVED,
-                payload: hasStartTime,
-              });
-              setIsDataLoading(false);
+          startTransition(() => {
+            setStartTime(
+              data.startTime !== undefined
+                ? data.startTime
+                : initialState.startTime,
+            );
+            setBreakTime(breakTimeAsString);
+            setEndTime(
+              data.endTime !== undefined ? data.endTime : initialState.endTime,
+            );
+            setLocation(
+              data.location !== undefined
+                ? data.location
+                : initialState.location,
+            );
+            setWorkingTime(data.workingTime || "");
+            dispatch({
+              type: EditActionType.CHECK_SAVED,
+              payload: hasStartTime,
             });
-          } else {
-            startTransition(() => {
-              setIsDataLoading(false);
-            });
-          }
+            setIsDataLoading(false);
+          });
         } else {
+          // データなし：初期状態のままロード完了
           startTransition(() => {
             setIsDataLoading(false);
           });
@@ -380,16 +370,10 @@ const KintaiForm: React.FC = () => {
     if (deferredDate) {
       loadDateInfo();
     }
-  }, [
-    deferredDate,
-    monthlyData,
-    currentYear,
-    currentMonth,
-    compareLogics,
-    getKintaiDataByDate,
-    isDateEntered,
-    isDateEnteredNew,
-  ]);
+    // 日付変更時はdirty解除し、前回日付を更新
+    isDirtyRef.current = false;
+    prevDateRef.current = deferredDate;
+  }, [deferredDate]);
 
   // スライドアニメーション用の状態
   const [isAnimating, setIsAnimating] = useState(false);
@@ -407,7 +391,10 @@ const KintaiForm: React.FC = () => {
     try {
       if (!contentRef.current) return;
       const rectTop = contentRef.current.getBoundingClientRect().top;
-      const viewportH = (window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
+      const viewportH =
+        window.visualViewport?.height ||
+        window.innerHeight ||
+        document.documentElement.clientHeight;
       const available = Math.max(0, viewportH - rectTop);
       setAvailableHeight(available);
 
@@ -460,6 +447,10 @@ const KintaiForm: React.FC = () => {
 
   const handleStartTimeChange = (time: string) => {
     setStartTime(time);
+    isDirtyRef.current = true;
+    if (!formState.isEditing) {
+      dispatch({ type: EditActionType.START_EDITING });
+    }
     validateForm({
       date: formState.date,
       startTime: time,
@@ -471,6 +462,10 @@ const KintaiForm: React.FC = () => {
 
   const handleBreakTimeChange = (timeString: string) => {
     setBreakTime(timeString);
+    isDirtyRef.current = true;
+    if (!formState.isEditing) {
+      dispatch({ type: EditActionType.START_EDITING });
+    }
     validateForm({
       date: formState.date,
       startTime,
@@ -482,6 +477,10 @@ const KintaiForm: React.FC = () => {
 
   const handleEndTimeChange = (time: string) => {
     setEndTime(time);
+    isDirtyRef.current = true;
+    if (!formState.isEditing) {
+      dispatch({ type: EditActionType.START_EDITING });
+    }
     validateForm({
       date: formState.date,
       startTime,
@@ -493,6 +492,10 @@ const KintaiForm: React.FC = () => {
 
   const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLocation(e.target.value);
+    isDirtyRef.current = true;
+    if (!formState.isEditing) {
+      dispatch({ type: EditActionType.START_EDITING });
+    }
     validateForm({
       date: formState.date,
       startTime,
@@ -541,6 +544,8 @@ const KintaiForm: React.FC = () => {
         const result = await saveKintaiToServer(formData);
 
         if (result.success) {
+          // 保存成功時にdirtyを明示的にクリア
+          isDirtyRef.current = false;
           dispatch({ type: EditActionType.SAVE_COMPLETE });
           // データ保存後にKintaiContextの月次データを更新
           await refreshData();
@@ -594,7 +599,8 @@ const KintaiForm: React.FC = () => {
 
       if (!result.success) {
         setErrors({
-          general: (result.error || "削除に失敗しました") + " / Failed to delete",
+          general:
+            (result.error || "削除に失敗しました") + " / Failed to delete",
         });
         return; // 失敗時もモーダルは閉じたまま
       }
@@ -614,7 +620,8 @@ const KintaiForm: React.FC = () => {
       await refreshData();
     } catch (error) {
       setErrors({
-        general: "削除処理でエラーが発生しました / Error occurred during deletion",
+        general:
+          "削除処理でエラーが発生しました / Error occurred during deletion",
       });
     } finally {
       setIsSubmitting(false);
@@ -743,7 +750,8 @@ const KintaiForm: React.FC = () => {
         {/* 古い日付の警告 */}
         {tooOldDateWarning && (
           <div className="warning-message">
-            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません / Dates older than {EDITABLE_DAYS} days cannot be edited
+            ⚠️ {EDITABLE_DAYS}日以上前の日付は編集できません / Dates older than{" "}
+            {EDITABLE_DAYS} days cannot be edited
           </div>
         )}
 
@@ -817,7 +825,8 @@ const KintaiForm: React.FC = () => {
             {jobOptions && jobOptions.length > 0 ? (
               jobOptions.map((opt) => (
                 <option key={opt.job} value={opt.job}>
-                  {opt.job}{opt.wage !== null ? ` / ¥${opt.wage}` : ""}
+                  {opt.job}
+                  {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
                 </option>
               ))
             ) : (

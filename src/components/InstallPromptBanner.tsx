@@ -8,7 +8,9 @@ const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // スタンドアロン(PWA)判定
 const isStandaloneDisplay = () => {
-  const mq = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  const mq =
+    window.matchMedia &&
+    window.matchMedia("(display-mode: standalone)").matches;
   const iosStandalone = (window.navigator as any).standalone === true; // iOS Safari
   return mq || iosStandalone;
 };
@@ -25,7 +27,8 @@ const getIconUrl = () => {
 };
 
 const InstallPromptBanner: React.FC = () => {
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installEvent, setInstallEvent] =
+    useState<BeforeInstallPromptEvent | null>(null);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const onceRef = useRef(false);
 
@@ -42,7 +45,9 @@ const InstallPromptBanner: React.FC = () => {
   useEffect(() => {
     // appinstalled: インストール完了時
     const handleInstalled = () => {
-      try { localStorage.setItem(INSTALLED_KEY, "1"); } catch {}
+      try {
+        localStorage.setItem(INSTALLED_KEY, "1");
+      } catch {}
       setInstallEvent(null);
       setShowIOSGuide(false);
     };
@@ -62,7 +67,9 @@ const InstallPromptBanner: React.FC = () => {
 
     // グローバル捕捉済みイベント（index.htmlで保存）
     try {
-      const globalEvent = (window as any).__bipEvent as BeforeInstallPromptEvent | undefined;
+      const globalEvent = (window as any).__bipEvent as
+        | BeforeInstallPromptEvent
+        | undefined;
       if (globalEvent && !onceRef.current) {
         setInstallEvent(globalEvent);
         onceRef.current = true;
@@ -71,7 +78,9 @@ const InstallPromptBanner: React.FC = () => {
 
     const onBipCaptured = () => {
       try {
-        const globalEvent = (window as any).__bipEvent as BeforeInstallPromptEvent | undefined;
+        const globalEvent = (window as any).__bipEvent as
+          | BeforeInstallPromptEvent
+          | undefined;
         if (globalEvent && !onceRef.current) {
           setInstallEvent(globalEvent);
           onceRef.current = true;
@@ -93,7 +102,10 @@ const InstallPromptBanner: React.FC = () => {
 
     return () => {
       window.removeEventListener("bip-captured", onBipCaptured);
-      window.removeEventListener("beforeinstallprompt", handler as EventListener);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handler as EventListener,
+      );
     };
   }, [installed]);
 
@@ -172,13 +184,22 @@ const InstallPromptBanner: React.FC = () => {
                 style={{ width: 48, height: 48, borderRadius: 8 }}
               />
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>ホーム画面に追加</div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>
+                  ホーム画面に追加
+                </div>
                 <div style={{ fontSize: 13, color: "#444" }}>
                   Safariの共有ボタンから「ホーム画面に追加」を選択してください。
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                marginTop: 16,
+              }}
+            >
               <button
                 onClick={handleLater}
                 style={{
@@ -219,7 +240,21 @@ const InstallPromptBanner: React.FC = () => {
           }}
           title={installEvent ? "インストール" : "手順を表示"}
         >
-          <span style={{ display: "inline-block", width: 18, height: 18, borderRadius: 4, background: "#fff", color: "#303f9f", fontWeight: 700, textAlign: "center", lineHeight: "18px" }}>+</span>
+          <span
+            style={{
+              display: "inline-block",
+              width: 18,
+              height: 18,
+              borderRadius: 4,
+              background: "#fff",
+              color: "#303f9f",
+              fontWeight: 700,
+              textAlign: "center",
+              lineHeight: "18px",
+            }}
+          >
+            +
+          </span>
           ホーム画面に追加
         </button>
       )}
@@ -230,7 +265,10 @@ const InstallPromptBanner: React.FC = () => {
 // TypeScript で beforeinstallprompt を扱うための型補完
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms?: string[];
-  readonly userChoice?: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+  readonly userChoice?: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
   prompt: () => Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 

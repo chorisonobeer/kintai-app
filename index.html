@@ -92,19 +92,10 @@
     </script>
 
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // サービスワーカーの登録
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('SW registered: ', registration);
-            })
-            .catch((registrationError) => {
-              console.log('SW registration failed: ', registrationError);
-            });
-        });
-      }
-    </script>
   </body>
 </html>
+<!--
+  /index.html
+  2025-11-07T10:30+09:00
+  変更概要: Service Worker登録スクリプト削除（登録をApp.tsxに一元化）
+-->

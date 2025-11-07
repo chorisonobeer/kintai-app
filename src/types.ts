@@ -35,6 +35,7 @@ export enum EditActionType {
   SAVE_COMPLETE = "SAVE_COMPLETE",
   DATE_CHANGE = "DATE_CHANGE",
   CHECK_SAVED = "CHECK_SAVED",
+  START_EDITING = "START_EDITING",
 }
 
 // ————————————————————————————————

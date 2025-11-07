@@ -9,6 +9,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { getMonthlyData } from "../utils/apiService";
@@ -57,62 +58,64 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
   const [lastFetchKey, setLastFetchKey] = useState<string>("");
 
   // 月間データ取得関数
-  const fetchMonthlyData = async (
-    year: number,
-    month: number,
-    forceRefresh = false,
-  ) => {
-    const fetchKey = `${year}-${month}-${forceRefresh}`;
+  const fetchMonthlyData = useCallback(
+    async (year: number, month: number, forceRefresh = false) => {
+      const fetchKey = `${year}-${month}-${forceRefresh}`;
 
-    // 同じリクエストが進行中の場合はスキップ
-    if (isDataLoading && lastFetchKey === fetchKey && !forceRefresh) {
-      // 重複データ取得をスキップ
-      return;
-    }
+      // 同じリクエストが進行中の場合はスキップ
+      if (isDataLoading && lastFetchKey === fetchKey && !forceRefresh) {
+        // 重複データ取得をスキップ
+        return;
+      }
 
-    try {
-      setIsDataLoading(true);
-      setLastFetchKey(fetchKey);
-      // データ取得開始
+      try {
+        setIsDataLoading(true);
+        setLastFetchKey(fetchKey);
+        // データ取得開始
 
-      const data = await getMonthlyData(year, month, forceRefresh);
-      setMonthlyData(data);
-      // データ取得完了
+        const data = await getMonthlyData(year, month, forceRefresh);
+        setMonthlyData(data);
+        // データ取得完了
 
-      // 新しい入力判定ロジック用のキャッシュを初期化（取得したデータを直接渡す）
-      await initializeEntryStatusCache(data);
-    } catch (error) {
-      // データ取得エラー
-      setMonthlyData([]);
-    } finally {
-      setIsDataLoading(false);
-    }
-  };
+        // 新しい入力判定ロジック用のキャッシュを初期化（取得したデータを直接渡す）
+        await initializeEntryStatusCache(data);
+      } catch (error) {
+        // データ取得エラー
+        setMonthlyData([]);
+      } finally {
+        setIsDataLoading(false);
+      }
+    },
+    [isDataLoading, lastFetchKey, currentYear, currentMonth],
+  );
 
   // 新しい入力判定ロジック用キャッシュの初期化
-  const initializeEntryStatusCache = async (data?: KintaiRecord[]) => {
-    try {
-      const yearMonth = `${currentYear}-${currentMonth.toString().padStart(2, "0")}`;
+  const initializeEntryStatusCache = useCallback(
+    async (data?: KintaiRecord[]) => {
+      try {
+        const yearMonth = `${currentYear}-${currentMonth.toString().padStart(2, "0")}`;
 
-      // 引数で渡されたデータを使用、なければmonthlyDataを使用
-      const sourceData = data || monthlyData;
+        // 引数で渡されたデータを使用、なければmonthlyDataを使用
+        const sourceData = data || monthlyData;
 
-      // KintaiRecord[] を KintaiData[] に変換
-      const convertedData = sourceData.map((record) => ({
-        date: record.date,
-        startTime: record.startTime,
-        breakTime: record.breakTime, // 元の値をそのまま渡す（空文字列やnullも保持）
-        endTime: record.endTime,
-        location: record.location || "",
-        workingTime: record.workingTime,
-      }));
+        // KintaiRecord[] を KintaiData[] に変換
+        const convertedData = sourceData.map((record) => ({
+          date: record.date,
+          startTime: record.startTime,
+          breakTime: record.breakTime, // 元の値をそのまま渡す（空文字列やnullも保持）
+          endTime: record.endTime,
+          location: record.location || "",
+          workingTime: record.workingTime,
+        }));
 
-      await entryStatusManager.initializeMonth(yearMonth, convertedData);
-      // EntryStatusManager初期化完了
-    } catch (error) {
-      // EntryStatusManager初期化エラー
-    }
-  };
+        await entryStatusManager.initializeMonth(yearMonth, convertedData);
+        // EntryStatusManager初期化完了
+      } catch (error) {
+        // EntryStatusManager初期化エラー
+      }
+    },
+    [currentYear, currentMonth, monthlyData],
+  );
 
   // 年月が変更されたら自動的にデータを再取得
   useEffect(() => {
@@ -128,56 +131,63 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
   }, [currentYear, currentMonth]);
 
   // 現在の年月でデータをリフレッシュ
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     await fetchMonthlyData(currentYear, currentMonth, true);
-  };
+  }, [fetchMonthlyData, currentYear, currentMonth]);
 
   // 日付の入力済み状態確認関数（既存ロジック）
-  const isDateEntered = (date: Date): boolean => {
-    const dateStr = formatDateForComparison(date);
-    const record = monthlyData.find((record) => record.date === dateStr);
+  const isDateEntered = useCallback(
+    (date: Date): boolean => {
+      const dateStr = formatDateForComparison(date);
+      const record = monthlyData.find((record) => record.date === dateStr);
 
-    if (!record) {
-      return false;
-    }
+      if (!record) {
+        return false;
+      }
 
-    // 実際にデータが入力されているかを確認
-    // 出勤時間または退勤時間が入力されていれば「入力済み」とする
-    // 休憩時間は0の可能性もあるため、入力判定には使用しない
-    const hasStartTime = record.startTime && record.startTime.trim() !== "";
-    const hasEndTime = record.endTime && record.endTime.trim() !== "";
+      // 実際にデータが入力されているかを確認
+      // 出勤時間または退勤時間が入力されていれば「入力済み」とする
+      // 休憩時間は0の可能性もあるため、入力判定には使用しない
+      const hasStartTime = record.startTime && record.startTime.trim() !== "";
+      const hasEndTime = record.endTime && record.endTime.trim() !== "";
 
-    return !!(hasStartTime || hasEndTime);
-  };
+      return !!(hasStartTime || hasEndTime);
+    },
+    [monthlyData],
+  );
 
   // 日付の入力済み状態確認関数（新しいロジック）
-  const isDateEnteredNew = (date: Date): boolean => {
+  const isDateEnteredNew = useCallback((date: Date): boolean => {
     const dateStr = formatDateForComparison(date);
     const result = entryStatusManager.isDateEntered(dateStr);
     return result.hasEntry;
-  };
+  }, []);
 
   // 既存ロジックと新ロジックの比較
-  const compareLogics = (
-    date: Date,
-  ): { legacy: boolean; new: boolean; match: boolean } => {
-    const legacyResult = isDateEntered(date);
-    const newResult = isDateEnteredNew(date);
-    const match = legacyResult === newResult;
+  const compareLogics = useCallback(
+    (date: Date): { legacy: boolean; new: boolean; match: boolean } => {
+      const legacyResult = isDateEntered(date);
+      const newResult = isDateEnteredNew(date);
+      const match = legacyResult === newResult;
 
-    // 不整合がある場合はログ出力
-    if (!match) {
-      // 入力判定ロジック不整合検出（デバッグ用）
-    }
+      // 不整合がある場合はログ出力
+      if (!match) {
+        // 入力判定ロジック不整合検出（デバッグ用）
+      }
 
-    return { legacy: legacyResult, new: newResult, match };
-  };
+      return { legacy: legacyResult, new: newResult, match };
+    },
+    [isDateEntered, isDateEnteredNew],
+  );
 
   // monthlyDataから特定日のデータを取得する関数
-  const getKintaiDataByDate = (dateString: string) => {
-    const record = monthlyData.find((record) => record.date === dateString);
-    return record || null;
-  };
+  const getKintaiDataByDate = useCallback(
+    (dateString: string) => {
+      const record = monthlyData.find((record) => record.date === dateString);
+      return record || null;
+    },
+    [monthlyData],
+  );
 
   // 比較用の日付フォーマット（YYYY-MM-DD）
   const formatDateForComparison = (date: Date): string => {

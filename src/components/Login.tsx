@@ -15,7 +15,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
 
     if (!name || !password) {
-      setError("名前とパスワードを入力してください / Please enter your name and password");
+      setError(
+        "名前とパスワードを入力してください / Please enter your name and password",
+      );
       return;
     }
 
@@ -28,12 +30,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       if (result.success) {
         onLoginSuccess();
       } else {
--        setError(result.error || "ログインに失敗しました");
-+        setError(result.error || "ログインに失敗しました / Login failed");
+        -setError(result.error || "ログインに失敗しました");
+        +setError(result.error || "ログインに失敗しました / Login failed");
       }
     } catch (err) {
--      setError("通信エラーが発生しました");
-+      setError("通信エラーが発生しました / Communication error occurred");
+      -setError("通信エラーが発生しました");
+      +setError("通信エラーが発生しました / Communication error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -41,11 +43,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="kintai-form">
--      <h2 className="login-title">ログイン</h2>
-+      <h2 className="login-title">ログイン / Login</h2>
-
+      - <h2 className="login-title">ログイン</h2>+{" "}
+      <h2 className="login-title">ログイン / Login</h2>
       {error && <div className="error-message">{error}</div>}
-
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="name">名前 / Name</label>
@@ -79,8 +79,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         <div className="button-container">
           <button type="submit" className="btn" disabled={isLoading}>
--            {isLoading ? "ログイン中..." : "ログイン"}
-+            {isLoading ? "ログイン中... / Logging in..." : "ログイン / Login"}
+            - {isLoading ? "ログイン中..." : "ログイン"}+{" "}
+            {isLoading ? "ログイン中... / Logging in..." : "ログイン / Login"}
           </button>
         </div>
       </form>

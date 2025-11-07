@@ -57,6 +57,7 @@ export enum EditActionType {
   SAVE_COMPLETE,
   DATE_CHANGE,
   CHECK_SAVED,
+  START_EDITING,
 }
 
 // MobileDatePickerで使用する選択可能な日付の型

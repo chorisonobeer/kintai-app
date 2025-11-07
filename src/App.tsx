@@ -3,13 +3,14 @@
  * 2025-06-14T10:30+09:00
  * 変更概要: バージョン更新プログレスバー機能追加
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import KintaiForm from "./components/KintaiForm";
 import Login from "./components/Login";
 import MonthlyView from "./components/MonthlyView";
 import Header from "./components/Header";
 import InstallPromptBanner from "./components/InstallPromptBanner";
+import LoadingModal from "./components/LoadingModal";
 import { isAuthenticated, logout } from "./utils/apiService";
 import { KintaiProvider } from "./contexts/KintaiContext";
 import { backgroundSyncManager } from "./utils/backgroundSync";
@@ -20,8 +21,16 @@ const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) =>
 
 const App: React.FC = () => {
   // バージョン更新プログレスバーの状態管理
-  const [versionUpdateProgress, setVersionUpdateProgress] = useState(0);
-  const [isVersionUpdating, setIsVersionUpdating] = useState(false);
+  // 旧更新プログレス関連の状態は廃止（Headerには未指定で渡す）
+  // 起動時のバージョン確認モーダル
+  const [showVersionCheckModal, setShowVersionCheckModal] = useState(false);
+  const [versionModalMessage, setVersionModalMessage] = useState<string>(
+    "Checking for new version...",
+  );
+  const [versionModalSubMessage, setVersionModalSubMessage] = useState<
+    string | undefined
+  >(undefined);
+  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   // アプリ起動時にlocalStorageの整合性をチェック
   useEffect(() => {
@@ -41,17 +50,23 @@ const App: React.FC = () => {
     if ("serviceWorker" in navigator) {
       try {
         const registration = await navigator.serviceWorker.register("/sw.js");
+        swRegistrationRef.current = registration;
 
         // Service Workerからのメッセージを受信
         navigator.serviceWorker.addEventListener(
           "message",
-          handleServiceWorkerMessage
+          handleServiceWorkerMessage,
         );
 
         // 認証済みユーザーの場合、バックグラウンド同期を開始
         if (isAuthenticated()) {
           await initializeBackgroundSync(registration);
         }
+
+        // 起動時のみバージョンチェックを実行
+        setShowVersionCheckModal(true);
+        setVersionModalMessage("Checking for new version...");
+        registration.active?.postMessage({ type: "CHECK_FOR_UPDATES" });
       } catch (error) {
         // Service Worker登録失敗
       }
@@ -62,7 +77,7 @@ const App: React.FC = () => {
 
   // バックグラウンド同期初期化
   const initializeBackgroundSync = async (
-    registration: ServiceWorkerRegistration
+    registration: ServiceWorkerRegistration,
   ) => {
     try {
       // BackgroundSyncManagerを開始
@@ -79,7 +94,7 @@ const App: React.FC = () => {
 
   // Service Workerからのメッセージ処理
   const handleServiceWorkerMessage = async (event: MessageEvent) => {
-    const { type } = event.data;
+    const { type, result } = event.data;
 
     switch (type) {
       case "BACKGROUND_SYNC_REQUEST":
@@ -99,26 +114,35 @@ const App: React.FC = () => {
         }
         break;
 
-      case "VERSION_UPDATE_START":
-        // バージョン更新開始
-        setIsVersionUpdating(true);
-        setVersionUpdateProgress(0);
+      case "VERSION_CHECK_RESULT": {
+        if (!result || result.status === "error") {
+          // エラー時はモーダルを閉じて続行
+          setShowVersionCheckModal(false);
+          break;
+        }
+        if (result.status === "latest") {
+          // 最新 → モーダルを閉じる
+          setShowVersionCheckModal(false);
+        } else if (result.status === "update_available") {
+          // 更新あり → ブロック表示に切替し適用要求を送信
+          setVersionModalMessage("アップデートを実行します");
+          setVersionModalSubMessage(undefined);
+          swRegistrationRef.current?.active?.postMessage({
+            type: "APPLY_UPDATE",
+          });
+        }
+        break;
+      }
+
+      case "UPDATE_APPLIED":
+        // 更新適用完了 → 安全に再起動
+        setShowVersionCheckModal(false);
+        window.location.reload();
         break;
 
-      case "VERSION_UPDATE_PROGRESS":
-        // バージョン更新進行状況
-        const { progress } = event.data;
-        setVersionUpdateProgress(progress || 0);
-        break;
-
-      case "NEW_VERSION_AVAILABLE":
-        // 新バージョン検出時の自動リロード
-        console.log("新バージョンが利用可能です。自動的にリロードします。");
-        // プログレスバーを100%にしてから少し待ってリロード
-        setVersionUpdateProgress(100);
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+      case "UPDATE_FAILED":
+        // 更新適用失敗 → モーダルを閉じて通常起動（ログのみ）
+        setShowVersionCheckModal(false);
         break;
 
       default:
@@ -154,10 +178,12 @@ const App: React.FC = () => {
                 <ProtectedRoute
                   element={
                     <>
-                      <Header 
-                        onLogout={handleLogout} 
-                        versionUpdateProgress={versionUpdateProgress}
-                        isVersionUpdating={isVersionUpdating}
+                      <Header onLogout={handleLogout} />
+                      <LoadingModal
+                        isOpen={showVersionCheckModal}
+                        message={versionModalMessage}
+                        subMessage={versionModalSubMessage}
+                        isLoading={true}
                       />
                       <KintaiForm />
                     </>
@@ -171,10 +197,12 @@ const App: React.FC = () => {
                 <ProtectedRoute
                   element={
                     <>
-                      <Header 
-                        onLogout={handleLogout} 
-                        versionUpdateProgress={versionUpdateProgress}
-                        isVersionUpdating={isVersionUpdating}
+                      <Header onLogout={handleLogout} />
+                      <LoadingModal
+                        isOpen={showVersionCheckModal}
+                        message={versionModalMessage}
+                        subMessage={versionModalSubMessage}
+                        isLoading={true}
                       />
                       <MonthlyView />
                     </>
