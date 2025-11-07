@@ -178,7 +178,7 @@ const calculateWorkingTime = (
 
 const KintaiForm: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshData } = useKintai();
+  const { refreshData, getKintaiDataByDate } = useKintai();
 
   // ユーザー認証チェック
   useEffect(() => {
@@ -549,6 +549,42 @@ const KintaiForm: React.FC = () => {
           dispatch({ type: EditActionType.SAVE_COMPLETE });
           // データ保存後にKintaiContextの月次データを更新
           await refreshData();
+
+          // 月次データ更新後、当日日付の最新レコードを取得してUIへ即時反映
+          const refreshed = getKintaiDataByDate(formState.date);
+          startTransition(() => {
+            const hasStart =
+              refreshed?.startTime && refreshed.startTime.trim() !== "";
+            const hasEnd =
+              refreshed?.endTime && refreshed.endTime.trim() !== "";
+
+            setStartTime(
+              refreshed?.startTime !== undefined
+                ? refreshed.startTime
+                : formData.startTime,
+            );
+            setBreakTime(
+              refreshed?.breakTime !== undefined
+                ? formatBreakTime(refreshed.breakTime)
+                : formatBreakTime(formData.breakTime),
+            );
+            setEndTime(
+              refreshed?.endTime !== undefined
+                ? refreshed.endTime
+                : formData.endTime,
+            );
+            setLocation(
+              refreshed?.location !== undefined
+                ? refreshed.location
+                : formData.location || "",
+            );
+            setWorkingTime(refreshed?.workingTime || "");
+            // 「未入力」表示を防ぐため、保存済み判定も更新
+            dispatch({
+              type: EditActionType.CHECK_SAVED,
+              payload: !!(hasStart || hasEnd),
+            });
+          });
         } else {
           setErrors({
             general:

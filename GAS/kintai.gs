@@ -1,4 +1,9 @@
 /**
+ * /GAS/kintai.gs
+ * 2025-11-07T10:00+09:00
+ * 変更概要: 更新 - 月次データ取得を範囲限定読込に最適化（EPIC-1）
+ */
+/**
  * kintai.gs
  * 2025-06-03T12:00+09:00
  * 変更概要: 更新 - 勤怠管理関連の機能を提供するモジュール（日付型対応、勤務場所対応、行位置特定アルゴリズム追加）
@@ -598,17 +603,40 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
       });
     }
     
-    // データの抽出と変換
+    // データの抽出と変換（範囲限定）
     diagInfo.stage = 'read_data';
+    /** @type {number} */
+    const lastRow = sheet.getLastRow();
+    /** @type {number} */
+    const lastCol = Math.min(sheet.getLastColumn(), 7); // A〜G列までを対象
+    /** @type {string} */
+    const startDateStr = `${year}/${month}/1`;
+    /** @type {number} */
+    let startRow = findOrCalculateRowByDate(sheet, startDateStr);
+    /** @type {number} */
+    const daysInMonth = new Date(year, month, 0).getDate();
+    /** @type {string} */
+    const endDateStr = `${year}/${month}/${daysInMonth}`;
+    /** @type {number} */
+    let endRow = findOrCalculateRowByDate(sheet, endDateStr);
+    if (startRow < 2) startRow = 2; // ヘッダーを除外
+    if (endRow < startRow) endRow = startRow; // 異常時のフォールバック
+    if (endRow > lastRow) endRow = lastRow; // 最終行を超えない
+    /** @type {number} */
+    const numRows = Math.max(0, endRow - startRow + 1);
+    if (numRows === 0) {
+      if (debug) Logger.log('対象月の行が見つかりません');
+      return Utils.createResponse({ ok: true, data: [], debug: debug ? diagInfo : undefined });
+    }
     /** @type {GoogleAppsScript.Spreadsheet.Range} */
-    const range = sheet.getDataRange();
+    const range = sheet.getRange(startRow, 1, numRows, lastCol);
     /** @type {any[][]} */
     const values = range.getValues();
-    if (debug) Logger.log("読み込み行数: " + values.length);
+    if (debug) Logger.log(`限定範囲読み込み: startRow=${startRow}, endRow=${endRow}, rows=${values.length}`);
     
     /** @type {KintaiRecord[]} */
     const result = [];
-    for (let i = 1; i < values.length; i++) {
+    for (let i = 0; i < values.length; i++) {
       const row = values[i];
       const dateVal = row[0];
       const monthVal = row[1];
