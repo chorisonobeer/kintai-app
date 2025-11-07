@@ -1,7 +1,7 @@
 /**
  * /src/App.tsx
- * 2025-06-14T10:30+09:00
- * 変更概要: バージョン更新プログレスバー機能追加
+ * 2025-11-07T10:45+09:00
+ * 変更概要: SW準備待ち＆タイムアウト導入でバージョンチェック停止を回避
  */
 import React, { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -31,6 +31,7 @@ const App: React.FC = () => {
     string | undefined
   >(undefined);
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const versionCheckTimeoutRef = useRef<number | null>(null);
 
   // アプリ起動時にlocalStorageの整合性をチェック
   useEffect(() => {
@@ -49,10 +50,10 @@ const App: React.FC = () => {
   const initializeServiceWorker = async () => {
     if ("serviceWorker" in navigator) {
       try {
+        // SW 登録
         const registration = await navigator.serviceWorker.register("/sw.js");
-        swRegistrationRef.current = registration;
 
-        // Service Workerからのメッセージを受信
+        // メッセージ受信リスナー
         navigator.serviceWorker.addEventListener(
           "message",
           handleServiceWorkerMessage,
@@ -63,12 +64,26 @@ const App: React.FC = () => {
           await initializeBackgroundSync(registration);
         }
 
-        // 起動時のみバージョンチェックを実行
+        // 起動時のみバージョンチェックを実行（SW準備を待つ）
         setShowVersionCheckModal(true);
         setVersionModalMessage("Checking for new version...");
-        registration.active?.postMessage({ type: "CHECK_FOR_UPDATES" });
+
+        // タイムアウト（10秒）でモーダルを自動クローズ
+        if (versionCheckTimeoutRef.current) {
+          window.clearTimeout(versionCheckTimeoutRef.current);
+        }
+        versionCheckTimeoutRef.current = window.setTimeout(() => {
+          setVersionModalSubMessage(undefined);
+          setShowVersionCheckModal(false);
+        }, 10000);
+
+        // SW が制御状態になるのを待ってからメッセージ送信
+        const readyRegistration = await navigator.serviceWorker.ready;
+        swRegistrationRef.current = readyRegistration;
+        readyRegistration.active?.postMessage({ type: "CHECK_FOR_UPDATES" });
       } catch (error) {
-        // Service Worker登録失敗
+        // Service Worker登録失敗時は通常起動
+        setShowVersionCheckModal(false);
       }
     } else {
       // Service Workerがサポートされていません
@@ -115,6 +130,11 @@ const App: React.FC = () => {
         break;
 
       case "VERSION_CHECK_RESULT": {
+        // タイムアウト解除
+        if (versionCheckTimeoutRef.current) {
+          window.clearTimeout(versionCheckTimeoutRef.current);
+          versionCheckTimeoutRef.current = null;
+        }
         if (!result || result.status === "error") {
           // エラー時はモーダルを閉じて続行
           setShowVersionCheckModal(false);

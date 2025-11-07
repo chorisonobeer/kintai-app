@@ -215,8 +215,8 @@ self.addEventListener('message', (event) => {
   
   switch (type) {
     case 'REGISTER_SYNC':
-      // バックグラウンド同期を登録
-      if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+      // バックグラウンド同期を登録（SWコンテキスト互換チェック）
+      if (self.registration && self.registration.sync && typeof self.registration.sync.register === 'function') {
         self.registration.sync.register(SYNC_TAG)
           .then(() => {
             console.log('Background sync registered');
@@ -225,6 +225,9 @@ self.addEventListener('message', (event) => {
           .catch(error => {
             console.error('Failed to register background sync:', error);
           });
+      } else {
+        console.log('Background sync not supported in SW context; using periodic scheduler only');
+        schedulePeriodicSync();
       }
       break;
       
