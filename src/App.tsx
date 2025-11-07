@@ -1,7 +1,7 @@
 /**
  * /src/App.tsx
- * 2025-11-07T10:45+09:00
- * 変更概要: SW準備待ち＆タイムアウト導入でバージョンチェック停止を回避
+ * 2025-11-07T12:42+09:00
+ * 変更概要: 起動時のバージョン確認モーダルを撤去し、更新あり時のみ最小表示
  */
 import React, { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -22,16 +22,10 @@ const ProtectedRoute: React.FC<{ element: React.ReactNode }> = ({ element }) =>
 const App: React.FC = () => {
   // バージョン更新プログレスバーの状態管理
   // 旧更新プログレス関連の状態は廃止（Headerには未指定で渡す）
-  // 起動時のバージョン確認モーダル
+  // 更新適用時のみモーダルを表示（最小表示）
   const [showVersionCheckModal, setShowVersionCheckModal] = useState(false);
-  const [versionModalMessage, setVersionModalMessage] = useState<string>(
-    "Checking for new version...",
-  );
-  const [versionModalSubMessage, setVersionModalSubMessage] = useState<
-    string | undefined
-  >(undefined);
+  const [versionModalMessage, setVersionModalMessage] = useState<string>("");
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
-  const versionCheckTimeoutRef = useRef<number | null>(null);
 
   // アプリ起動時にlocalStorageの整合性をチェック
   useEffect(() => {
@@ -63,19 +57,6 @@ const App: React.FC = () => {
         if (isAuthenticated()) {
           await initializeBackgroundSync(registration);
         }
-
-        // 起動時のみバージョンチェックを実行（SW準備を待つ）
-        setShowVersionCheckModal(true);
-        setVersionModalMessage("Checking for new version...");
-
-        // タイムアウト（10秒）でモーダルを自動クローズ
-        if (versionCheckTimeoutRef.current) {
-          window.clearTimeout(versionCheckTimeoutRef.current);
-        }
-        versionCheckTimeoutRef.current = window.setTimeout(() => {
-          setVersionModalSubMessage(undefined);
-          setShowVersionCheckModal(false);
-        }, 10000);
 
         // SW が制御状態になるのを待ってからメッセージ送信
         const readyRegistration = await navigator.serviceWorker.ready;
@@ -130,23 +111,17 @@ const App: React.FC = () => {
         break;
 
       case "VERSION_CHECK_RESULT": {
-        // タイムアウト解除
-        if (versionCheckTimeoutRef.current) {
-          window.clearTimeout(versionCheckTimeoutRef.current);
-          versionCheckTimeoutRef.current = null;
-        }
         if (!result || result.status === "error") {
           // エラー時はモーダルを閉じて続行
           setShowVersionCheckModal(false);
           break;
         }
         if (result.status === "latest") {
-          // 最新 → モーダルを閉じる
-          setShowVersionCheckModal(false);
+          // 最新 → 起動時モーダルは表示しないため何もしない
         } else if (result.status === "update_available") {
           // 更新あり → ブロック表示に切替し適用要求を送信
           setVersionModalMessage("アップデートを実行します");
-          setVersionModalSubMessage(undefined);
+          setShowVersionCheckModal(true);
           swRegistrationRef.current?.active?.postMessage({
             type: "APPLY_UPDATE",
           });
@@ -202,8 +177,9 @@ const App: React.FC = () => {
                       <LoadingModal
                         isOpen={showVersionCheckModal}
                         message={versionModalMessage}
-                        subMessage={versionModalSubMessage}
                         isLoading={true}
+                        showHeader={false}
+                        showFooter={false}
                       />
                       <KintaiForm />
                     </>
@@ -221,8 +197,9 @@ const App: React.FC = () => {
                       <LoadingModal
                         isOpen={showVersionCheckModal}
                         message={versionModalMessage}
-                        subMessage={versionModalSubMessage}
                         isLoading={true}
+                        showHeader={false}
+                        showFooter={false}
                       />
                       <MonthlyView />
                     </>

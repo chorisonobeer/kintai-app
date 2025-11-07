@@ -1030,14 +1030,16 @@ const KintaiForm: React.FC = () => {
       <LoadingModal
         isOpen={isDataLoading}
         isLoading={true}
-        message="データを読み込み中... / Loading data..."
-        subMessage="最新の勤怠データを取得しています"
+        message="データを読み込み中..."
+        showHeader={false}
+        showFooter={false}
       />
       <LoadingModal
         isOpen={isSubmitting}
         isLoading={false}
-        message="書き込み中... / Writing..."
-        subMessage="サーバーへ保存しています"
+        message="書き込み中..."
+        showHeader={false}
+        showFooter={false}
       />
     </div>
   );

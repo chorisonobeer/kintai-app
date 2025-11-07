@@ -468,8 +468,9 @@ const MonthlyView: React.FC = () => {
         <LoadingModal
           isOpen={true}
           isLoading={true}
-          message="データを読み込み中... / Loading data..."
-          subMessage={isRefreshing ? "更新中です" : "月次データ取得中"}
+          message={isRefreshing ? "更新中..." : "データを読み込み中..."}
+          showHeader={false}
+          showFooter={false}
         />
       )}
     </div>
