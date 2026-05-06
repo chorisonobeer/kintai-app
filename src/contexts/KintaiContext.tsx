@@ -12,7 +12,7 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
-import { getMonthlyData } from "../utils/apiService";
+import { getMonthlyData, overlayPendingOnto } from "../utils/apiService";
 import { KintaiRecord } from "../types";
 import { entryStatusManager } from "../utils/entryStatusManager";
 
@@ -137,6 +137,7 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
 
   // Phase E-1: SWR revalidate 完了イベントを購読
   // getMonthlyData の裏タスクが成功すると kintai:data-updated が発火される
+  // v12: queue 内 pending を overlay してから state 更新（楽観値を維持）
   useEffect(() => {
     const onUpdated = (e: Event) => {
       const ce = e as CustomEvent<{
@@ -145,29 +146,93 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
         data: KintaiRecord[];
       }>;
       if (!ce.detail) return;
-      // 現在表示中の月のデータだけ UI に反映
-      if (
-        ce.detail.year === currentYear &&
-        ce.detail.month === currentMonth
-      ) {
-        setMonthlyData(ce.detail.data);
-        void initializeEntryStatusCache(ce.detail.data);
+      if (ce.detail.year === currentYear && ce.detail.month === currentMonth) {
+        const merged = overlayPendingOnto(
+          ce.detail.data,
+          ce.detail.year,
+          ce.detail.month,
+        );
+        setMonthlyData(merged);
+        void initializeEntryStatusCache(merged);
       }
     };
     const onStale = (e: Event) => {
-      // revalidate 失敗: 表示中のデータは古い可能性
-      // 現状はコンソール警告のみ（将来的に StaleDataBanner 等で UI 表示）
       const ce = e as CustomEvent<{ year: number; month: number }>;
       // eslint-disable-next-line no-console
       console.warn(
         `[kintai] 表示中のデータは最新でない可能性があります (${ce.detail?.year}-${ce.detail?.month})`,
       );
     };
+
+    // v12 楽観的更新: 楽観適用 → sessionStorage cache から最新を読んで state 更新
+    //                  + 「保存しました」トースト発火（0.8 秒）
+    const onOptimistic = (e: Event) => {
+      const ce = e as CustomEvent<{
+        year: number;
+        month: number;
+        date: string;
+      }>;
+      if (!ce.detail) return;
+      if (ce.detail.year !== currentYear || ce.detail.month !== currentMonth)
+        return;
+      try {
+        const raw = sessionStorage.getItem("kintai_monthly_data");
+        if (raw) {
+          const map = JSON.parse(raw) as Record<string, KintaiRecord[]>;
+          const list = map[`${ce.detail.year}-${ce.detail.month}`];
+          if (Array.isArray(list)) {
+            setMonthlyData(list);
+            void initializeEntryStatusCache(list);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      window.dispatchEvent(
+        new CustomEvent("kintai:toast", { detail: "保存しました" }),
+      );
+    };
+
+    // v12 楽観的更新: 失敗で rollback された cache を state に反映
+    const onFailed = (e: Event) => {
+      const ce = e as CustomEvent<{
+        year: number;
+        month: number;
+        date: string;
+        error: string;
+        entryId: string;
+      }>;
+      if (!ce.detail) return;
+      if (ce.detail.year !== currentYear || ce.detail.month !== currentMonth)
+        return;
+      try {
+        const raw = sessionStorage.getItem("kintai_monthly_data");
+        if (raw) {
+          const map = JSON.parse(raw) as Record<string, KintaiRecord[]>;
+          const list = map[`${ce.detail.year}-${ce.detail.month}`];
+          if (Array.isArray(list)) {
+            setMonthlyData(list);
+            void initializeEntryStatusCache(list);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[kintai] 保存に失敗しました (${ce.detail.date}): ${ce.detail.error}`,
+      );
+    };
+
     window.addEventListener("kintai:data-updated", onUpdated);
     window.addEventListener("kintai:data-stale", onStale);
+    window.addEventListener("kintai:save-optimistic", onOptimistic);
+    window.addEventListener("kintai:save-failed", onFailed);
     return () => {
       window.removeEventListener("kintai:data-updated", onUpdated);
       window.removeEventListener("kintai:data-stale", onStale);
+      window.removeEventListener("kintai:save-optimistic", onOptimistic);
+      window.removeEventListener("kintai:save-failed", onFailed);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, currentMonth]);

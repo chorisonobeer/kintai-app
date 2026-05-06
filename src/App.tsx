@@ -11,7 +11,12 @@ import MonthlyView from "./components/MonthlyView";
 import Header from "./components/Header";
 import InstallPromptBanner from "./components/InstallPromptBanner";
 import LoadingModal from "./components/LoadingModal";
-import { isAuthenticated, logout } from "./utils/apiService";
+import Toast from "./components/Toast";
+import {
+  isAuthenticated,
+  logout,
+  initPendingSaveQueue,
+} from "./utils/apiService";
 import { KintaiProvider } from "./contexts/KintaiContext";
 import { backgroundSyncManager } from "./utils/backgroundSync";
 
@@ -53,6 +58,9 @@ const App: React.FC = () => {
 
     // Service Workerの登録とバックグラウンド同期の初期化
     initializeServiceWorker();
+
+    // v12 楽観的更新: 起動時に pending queue を flush + online listener 登録
+    initPendingSaveQueue();
   }, []);
 
   // Service Worker初期化処理
@@ -95,7 +103,7 @@ const App: React.FC = () => {
   ) => {
     try {
       // BackgroundSyncManagerを開始
-      await backgroundSyncManager.start();
+      backgroundSyncManager.start();
 
       // Service Workerに同期登録を要求
       if (registration.active) {
@@ -182,6 +190,8 @@ const App: React.FC = () => {
         <KintaiProvider>
           {/* PWAインストール促しバナーを全ルートで常時マウント */}
           <InstallPromptBanner />
+          {/* v12 楽観的更新フィードバック用トースト（全ルート共通） */}
+          <Toast />
           <Routes>
             {/* ログイン画面 - ヘッダーなし */}
             <Route

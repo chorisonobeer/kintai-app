@@ -76,6 +76,28 @@ exports.handler = async function (event) {
       `[kintai-api] ← GAS status=${resp.status} action=${actionForLog} elapsed=${Date.now() - t0}ms bodyBytes=${text.length}`,
     );
 
+    // dev: GAS の diagInfo.timings を整形してログ出力（Network タブ不要）
+    try {
+      const parsedResp = JSON.parse(text);
+      const dbg = parsedResp && parsedResp.debug;
+      const tm = dbg && dbg.timings;
+      if (tm) {
+        const fmt = Object.keys(tm)
+          .map((k) => `${k}=${tm[k]}ms`)
+          .join(" ");
+        const extra = [];
+        if (dbg.handlerVersion) extra.push(`ver=${dbg.handlerVersion}`);
+        if (typeof dbg.cacheHit === "boolean") extra.push(`cacheHit=${dbg.cacheHit}`);
+        if (typeof dbg.salary === "number") extra.push(`salary=${dbg.salary}`);
+        if (typeof dbg.rowIndex === "number") extra.push(`row=${dbg.rowIndex}`);
+        console.log(
+          `[kintai-api]    timings(${actionForLog}) ${fmt}${extra.length ? " | " + extra.join(" ") : ""}`,
+        );
+      }
+    } catch {
+      /* ignore parse errors */
+    }
+
     return {
       statusCode: resp.ok ? 200 : 502,
       headers: {

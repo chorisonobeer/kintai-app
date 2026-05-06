@@ -31,9 +31,9 @@ import {
   EDITABLE_DAYS,
 } from "../utils/dateUtils";
 import {
-  saveKintaiToServer,
+  enqueueSave,
   isAuthenticated,
-  getJobWageOptionsFromCsv,
+  getJobWageOptions,
   getKintaiDataFromMonthlyData,
 } from "../utils/apiService";
 import { useKintai } from "../contexts/KintaiContext";
@@ -177,11 +177,7 @@ const calculateWorkingTime = (
 };
 
 // 勤務時間を分単位で返す（引数で新しい値を直接渡せる）
-const getWorkingMinutes = (
-  st: string,
-  et: string,
-  bt: string,
-): number => {
+const getWorkingMinutes = (st: string, et: string, bt: string): number => {
   if (!st || !et) return 0;
   const wt = calculateWorkingTime(st, et, bt);
   if (!wt) return 0;
@@ -212,8 +208,6 @@ const KintaiForm: React.FC = () => {
   // - monthlyData から直接参照（getKintaiDataByDateApi は廃止、API重複を排除）
   // - 日付変更時に Context の年月を同期（月またぎ対応）
   const {
-    refreshData,
-    getKintaiDataByDate,
     monthlyData,
     isDataLoading: isContextLoading,
     currentYear,
@@ -332,7 +326,7 @@ const KintaiForm: React.FC = () => {
     if (jobOptionsLoadedRef.current) return;
     jobOptionsLoadedRef.current = true;
     try {
-      const list = await getJobWageOptionsFromCsv();
+      const list = await getJobWageOptions();
       setJobOptions(list);
     } catch {
       // 失敗時はフラグを戻して再試行可能にする
@@ -569,10 +563,7 @@ const KintaiForm: React.FC = () => {
   // 作業操作ハンドラ
   const handleAddTask = () => {
     const totalMinutes = getWorkingMinutes(startTime, endTime, breakTime);
-    const usedMinutes = tasks.reduce(
-      (sum, t) => sum + (t.hours || 0) * 60,
-      0,
-    );
+    const usedMinutes = tasks.reduce((sum, t) => sum + (t.hours || 0) * 60, 0);
     const remainMinutes = Math.max(0, totalMinutes - usedMinutes);
     setTasks((prev) => [
       ...prev,
@@ -593,9 +584,7 @@ const KintaiForm: React.FC = () => {
   };
 
   const handleTaskJobChange = (index: number, job: string) => {
-    setTasks((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, job } : t)),
-    );
+    setTasks((prev) => prev.map((t, i) => (i === index ? { ...t, job } : t)));
     isDirtyRef.current = true;
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
@@ -605,9 +594,7 @@ const KintaiForm: React.FC = () => {
 
   const handleTaskHoursChange = (index: number, hours: number) => {
     setTasks((prev) => {
-      const updated = prev.map((t, i) =>
-        i === index ? { ...t, hours } : t,
-      );
+      const updated = prev.map((t, i) => (i === index ? { ...t, hours } : t));
       const totalMinutes = getWorkingMinutes(startTime, endTime, breakTime);
       if (totalMinutes > 0 && index !== prev.length - 1 && prev.length > 1) {
         const usedByOthers = updated
@@ -634,14 +621,11 @@ const KintaiForm: React.FC = () => {
 
     // 作業内容の必須チェック
     if (!data.tasks || data.tasks.length === 0) {
-      newErrors.tasks =
-        "作業を追加してください / Please add a task";
+      newErrors.tasks = "作業を追加してください / Please add a task";
     } else if (data.tasks.some((t) => !t.job)) {
-      newErrors.tasks =
-        "作業内容を選択してください / Please select task type";
+      newErrors.tasks = "作業内容を選択してください / Please select task type";
     } else if (data.tasks.some((t) => !t.hours || t.hours <= 0)) {
-      newErrors.tasks =
-        "作業時間を入力してください / Please enter hours";
+      newErrors.tasks = "作業時間を入力してください / Please enter hours";
     }
 
     // 出勤時間が退勤時間より前かチェック
@@ -670,61 +654,34 @@ const KintaiForm: React.FC = () => {
     const isValid = validateForm(formData);
 
     if (isValid) {
-      try {
-        const result = await saveKintaiToServer(formData);
+      // v12 楽観的更新: 即時 UI 反映、裏で送信
+      const result = enqueueSave(formData);
 
-        if (result.success) {
-          // 保存成功時にdirtyを明示的にクリア
-          isDirtyRef.current = false;
-          dispatch({ type: EditActionType.SAVE_COMPLETE });
-          // データ保存後にKintaiContextの月次データを更新
-          await refreshData();
-
-          // 月次データ更新後、当日日付の最新レコードを取得してUIへ即時反映
-          const refreshed = getKintaiDataByDate(formState.date);
-          startTransition(() => {
-            const hasStart =
-              refreshed?.startTime && refreshed.startTime.trim() !== "";
-            const hasEnd =
-              refreshed?.endTime && refreshed.endTime.trim() !== "";
-
-            setStartTime(
-              refreshed?.startTime !== undefined
-                ? refreshed.startTime
-                : formData.startTime,
-            );
-            setBreakTime(
-              refreshed?.breakTime !== undefined
-                ? formatBreakTime(refreshed.breakTime)
-                : formatBreakTime(formData.breakTime),
-            );
-            setEndTime(
-              refreshed?.endTime !== undefined
-                ? refreshed.endTime
-                : formData.endTime,
-            );
-            setTasks(
-              refreshed?.tasks && refreshed.tasks.length > 0
-                ? refreshed.tasks
-                : formData.tasks || [],
-            );
-            setWorkingTime(refreshed?.workingTime || "");
-            // 「未入力」表示を防ぐため、保存済み判定も更新
-            dispatch({
-              type: EditActionType.CHECK_SAVED,
-              payload: !!(hasStart || hasEnd),
-            });
+      if (result.success) {
+        isDirtyRef.current = false;
+        dispatch({ type: EditActionType.SAVE_COMPLETE });
+        // 楽観値で UI を即更新（API 完了を待たない）
+        startTransition(() => {
+          setStartTime(formData.startTime);
+          setBreakTime(formatBreakTime(formData.breakTime));
+          setEndTime(formData.endTime);
+          setTasks(formData.tasks || []);
+          setWorkingTime(
+            calculateWorkingTime(
+              formData.startTime,
+              formData.endTime,
+              formData.breakTime,
+            ),
+          );
+          dispatch({
+            type: EditActionType.CHECK_SAVED,
+            payload: !!(formData.startTime || formData.endTime),
           });
-        } else {
-          setErrors({
-            general:
-              (result.error || "エラーが発生しました") + " / An error occurred",
-          });
-        }
-      } catch (error) {
+        });
+      } else {
         setErrors({
           general:
-            "保存中にエラーが発生しました / An error occurred while saving",
+            (result.error || "エラーが発生しました") + " / An error occurred",
         });
       }
     }
@@ -747,52 +704,38 @@ const KintaiForm: React.FC = () => {
     setShowDeleteModal(false);
   };
 
-  // データ削除処理
-  const handleDeleteConfirm = async () => {
-    try {
-      setIsSubmitting(true);
-      // ユーザ操作のフィードバックを優先して、削除開始時点でモーダルを閉じる
-      setShowDeleteModal(false);
+  // データ削除処理（v12: 楽観的更新で即時反映）
+  const handleDeleteConfirm = () => {
+    setIsSubmitting(true);
+    setShowDeleteModal(false);
 
-      // サーバーに空データを送信して該当日の値をクリア（A案）
-      const result = await saveKintaiToServer({
-        date: formState.date,
-        startTime: "",
-        breakTime: "",
-        endTime: "",
-        tasks: [],
-        location: "",
-      });
+    const result = enqueueSave({
+      date: formState.date,
+      startTime: "",
+      breakTime: "",
+      endTime: "",
+      tasks: [],
+      location: "",
+    });
 
-      if (!result.success) {
-        setErrors({
-          general:
-            (result.error || "削除に失敗しました") + " / Failed to delete",
-        });
-        return; // 失敗時もモーダルは閉じたまま
-      }
-
-      // ローカルフォーム値もクリア
-      setStartTime("");
-      setBreakTime("");
-      setEndTime("");
-      setTasks([]);
-      setWorkingTime("");
-
-      // 編集終了
-      dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
-      dispatch({ type: EditActionType.CANCEL_EDIT });
-
-      // 月次データを再取得してUIへ反映
-      await refreshData();
-    } catch (error) {
+    if (!result.success) {
       setErrors({
-        general:
-          "削除処理でエラーが発生しました / Error occurred during deletion",
+        general: (result.error || "削除に失敗しました") + " / Failed to delete",
       });
-    } finally {
       setIsSubmitting(false);
+      return;
     }
+
+    // 楽観的にフォーム値クリア
+    setStartTime("");
+    setBreakTime("");
+    setEndTime("");
+    setTasks([]);
+    setWorkingTime("");
+    dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
+    dispatch({ type: EditActionType.CANCEL_EDIT });
+
+    setIsSubmitting(false);
   };
 
   // 長押し処理
@@ -1065,26 +1008,18 @@ const KintaiForm: React.FC = () => {
                 const [h, m] = workingTime.split(":").map(Number);
                 return h * 60 + (m || 0);
               })();
-              const isOver =
-                wtMinutes > 0 && tasksTotalMinutes > wtMinutes;
+              const isOver = wtMinutes > 0 && tasksTotalMinutes > wtMinutes;
               const totalH = Math.floor(tasksTotalMinutes / 60);
               const totalM = Math.round(tasksTotalMinutes % 60);
               return (
-                <div
-                  className={`task-summary ${isOver ? "over-hours" : ""}`}
-                >
-                  作業合計: {totalH}:
-                  {String(totalM).padStart(2, "0")}
-                  {workingTime
-                    ? ` / 勤務時間: ${workingTime}`
-                    : ""}
+                <div className={`task-summary ${isOver ? "over-hours" : ""}`}>
+                  作業合計: {totalH}:{String(totalM).padStart(2, "0")}
+                  {workingTime ? ` / 勤務時間: ${workingTime}` : ""}
                 </div>
               );
             })()}
         </div>
-        {errors.tasks && (
-          <div className="error-message">{errors.tasks}</div>
-        )}
+        {errors.tasks && <div className="error-message">{errors.tasks}</div>}
 
         {/* エラーメッセージ */}
         {errors.general && (
