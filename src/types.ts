@@ -1,6 +1,13 @@
 // src/types.ts
 
 // ————————————————————————————————
+// 作業内容の1件分
+export interface TaskEntry {
+  job: string; // 作業名（例: "草刈り"）
+  hours: number; // 作業時間（小数可、例: 2.5）
+}
+
+// ————————————————————————————————
 // 勤怠データ登録・保存用
 export interface KintaiData {
   date: string; // yyyy-MM-dd
@@ -8,6 +15,7 @@ export interface KintaiData {
   breakTime: string; // HH:mm形式で保持
   endTime: string; // HH:mm
   location?: string;
+  tasks?: TaskEntry[];
   workingTime?: string; // 勤務時間（HH:mm形式）
 }
 
@@ -19,6 +27,7 @@ export interface KintaiFormState {
   breakTime: string; // HH:mm形式で保持
   endTime: string;
   location?: string;
+  tasks?: TaskEntry[];
 
   // 以下、UI上で参照するフラグ・タイマー
   isSaved: boolean;
@@ -46,6 +55,7 @@ export interface ValidationErrors {
   breakTime?: string;
   endTime?: string;
   location?: string;
+  tasks?: string;
   general?: string;
 }
 
@@ -77,6 +87,7 @@ export type KintaiRecord = {
   endTime: string;
   workingTime: string; // ex: '8.0h' - スプレッドシートのF列から取得
   location?: string;
+  tasks?: TaskEntry[];
 };
 
 // ————————————————————————————————

@@ -21,6 +21,7 @@ import {
   EditActionType,
   ValidationErrors,
   KintaiData,
+  TaskEntry,
 } from "../types";
 import {
   getCurrentDate,
@@ -33,10 +34,11 @@ import {
   saveKintaiToServer,
   isAuthenticated,
   getJobWageOptionsFromCsv,
-  getKintaiDataByDate as getKintaiDataByDateApi,
+  getKintaiDataFromMonthlyData,
 } from "../utils/apiService";
 import { useKintai } from "../contexts/KintaiContext";
 import LoadingModal from "./LoadingModal";
+import DrumTimePicker from "./drumtimepicker";
 
 // 初期状態
 const initialState: KintaiFormState = {
@@ -174,11 +176,51 @@ const calculateWorkingTime = (
   }
 };
 
+// 勤務時間を分単位で返す（引数で新しい値を直接渡せる）
+const getWorkingMinutes = (
+  st: string,
+  et: string,
+  bt: string,
+): number => {
+  if (!st || !et) return 0;
+  const wt = calculateWorkingTime(st, et, bt);
+  if (!wt) return 0;
+  const [h, m] = wt.split(":").map(Number);
+  return h * 60 + (m || 0);
+};
+
+const roundTo5min = (minutes: number): number => Math.round(minutes / 5) * 5;
+const minutesToHours = (minutes: number): number => roundTo5min(minutes) / 60;
+
+// hours(小数) ↔ "H:mm" 変換
+const hoursToHHmm = (hours: number): string => {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}:${String(m).padStart(2, "0")}`;
+};
+const hhmmToHours = (hhmm: string): number => {
+  if (!hhmm) return 0;
+  const [h, m] = hhmm.split(":").map(Number);
+  return h + (m || 0) / 60;
+};
+
 // formatTimeToHHMM ヘルパー関数は apiService 側で処理するため削除
 
 const KintaiForm: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshData, getKintaiDataByDate } = useKintai();
+  // Phase C-1: Context を単一の真実の源にする
+  // - monthlyData から直接参照（getKintaiDataByDateApi は廃止、API重複を排除）
+  // - 日付変更時に Context の年月を同期（月またぎ対応）
+  const {
+    refreshData,
+    getKintaiDataByDate,
+    monthlyData,
+    isDataLoading: isContextLoading,
+    currentYear,
+    currentMonth,
+    setCurrentYear,
+    setCurrentMonth,
+  } = useKintai();
 
   // ユーザー認証チェック
   useEffect(() => {
@@ -198,7 +240,7 @@ const KintaiForm: React.FC = () => {
   const [startTime, setStartTime] = useState(initialState.startTime);
   const [breakTime, setBreakTime] = useState<string>(initialState.breakTime);
   const [endTime, setEndTime] = useState(initialState.endTime);
-  const [location, setLocation] = useState(initialState.location);
+  const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [workingTime, setWorkingTime] = useState(""); // 勤務時間の状態を追加
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [jobOptions, setJobOptions] = useState<
@@ -282,98 +324,120 @@ const KintaiForm: React.FC = () => {
     setWorkingTime(calculatedWorkingTime);
   }, [startTime, endTime, breakTime]);
 
-  // 仕事内容・時給の選択肢をCSVから取得（フロント直取得）
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await getJobWageOptionsFromCsv();
-        setJobOptions(list);
-      } catch {}
-    })();
-  }, []);
+  // Phase C-2: 仕事内容ドロップダウンは遅延取得
+  // 起動時ではなく、ユーザーが作業内容欄を初めて操作したタイミングで CSV を取得する
+  // sessionStorage キャッシュ（30分TTL）があるので2回目以降は即時
+  const jobOptionsLoadedRef = useRef(false);
+  const loadJobOptions = async () => {
+    if (jobOptionsLoadedRef.current) return;
+    jobOptionsLoadedRef.current = true;
+    try {
+      const list = await getJobWageOptionsFromCsv();
+      setJobOptions(list);
+    } catch {
+      // 失敗時はフラグを戻して再試行可能にする
+      jobOptionsLoadedRef.current = false;
+    }
+  };
 
-  // 日付に入力済みフラグチェック
+  // ─── Phase C-1: データ同期を2つの useEffect に分離 ───
 
-  // 日付変更時（React 18の並行機能を使用）
+  // (A) 月同期 useEffect: 日付の年月が変わったら Context の currentYear/currentMonth を追従
+  // 編集中でも走る（Context は常に正しい月を指す必要がある）
+  // 依存配列は formState.date のみ（currentYear/currentMonth を入れると過剰発火）
   useEffect(() => {
-    // 同一日・編集中またはdirtyの場合はロード処理を抑止
+    if (!formState.date) return;
+    const y = parseInt(formState.date.substring(0, 4), 10);
+    const m = parseInt(formState.date.substring(5, 7), 10);
+    if (Number.isNaN(y) || Number.isNaN(m)) return;
+
+    if (y !== currentYear || m !== currentMonth) {
+      // React 18 自動バッチングで1回のrenderで両方更新される
+      setCurrentYear(y);
+      setCurrentMonth(m);
+      // → KintaiContext の useEffect([currentYear, currentMonth]) が発火 →
+      //   fetchMonthlyData → monthlyData が新月に切り替わる
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formState.date]);
+
+  // (B) データ適用 useEffect: monthlyData が現在月と一致した時のみフォーム値を更新
+  useEffect(() => {
+    // 同一日・編集中またはdirtyの場合はロード処理を抑止（編集中データを保護）
     if (
       prevDateRef.current === deferredDate &&
       (formState.isEditing || isDirtyRef.current)
     ) {
       return;
     }
-    const loadDateInfo = async () => {
-      // UIの応答性を保つため、重い処理をstartTransitionで包む
-      startTransition(() => {
-        setIsDataLoading(true);
-        setErrors({}); // 日付変更時にエラーをリセット
 
-        // 初期化条件を緩和: 編集中でない場合は必ず状態をリセット
-        if (!formState.isEditing) {
-          setStartTime(initialState.startTime);
-          setBreakTime(initialState.breakTime);
-          setEndTime(initialState.endTime);
-          setLocation(initialState.location);
-          setWorkingTime("");
-          dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
-        }
-      });
-
-      try {
-        // 月跨ぎ判定を排し、対象日付のデータ存在をAPIで直接確認
-        const data = await getKintaiDataByDateApi(deferredDate);
-
-        if (data) {
-          const hasStartTime = data.startTime && data.startTime.trim() !== "";
-          const breakTimeAsString = formatBreakTime(data.breakTime);
-
-          startTransition(() => {
-            setStartTime(
-              data.startTime !== undefined
-                ? data.startTime
-                : initialState.startTime,
-            );
-            setBreakTime(breakTimeAsString);
-            setEndTime(
-              data.endTime !== undefined ? data.endTime : initialState.endTime,
-            );
-            setLocation(
-              data.location !== undefined
-                ? data.location
-                : initialState.location,
-            );
-            setWorkingTime(data.workingTime || "");
-            dispatch({
-              type: EditActionType.CHECK_SAVED,
-              payload: hasStartTime,
-            });
-            setIsDataLoading(false);
-          });
-        } else {
-          // データなし：初期状態のままロード完了
-          startTransition(() => {
-            setIsDataLoading(false);
-          });
-        }
-      } catch (error) {
-        startTransition(() => {
-          setErrors({ general: "データの読み込みに失敗しました。" });
-          setIsDataLoading(false);
-        });
+    // 日付変更直後で Context の年月がまだ古い場合は待機
+    const y = parseInt(deferredDate.substring(0, 4), 10);
+    const m = parseInt(deferredDate.substring(5, 7), 10);
+    if (!Number.isNaN(y) && !Number.isNaN(m)) {
+      if (y !== currentYear || m !== currentMonth) {
+        // 月同期 useEffect (A) が走って Context が新月に切り替わるのを待つ
+        return;
       }
-
-      const isOldDate = isDateTooOld(deferredDate);
-      setTooOldDateWarning(isOldDate);
-    };
-
-    if (deferredDate) {
-      loadDateInfo();
     }
+
+    // Context が該当月のデータを読み込み中なら待機
+    if (isContextLoading) {
+      // ローディング表示は Context 側で制御
+      startTransition(() => setIsDataLoading(true));
+      return;
+    }
+
+    // 編集中でなければフォーム値をリセットしてから新データ適用
+    startTransition(() => {
+      setErrors({});
+      if (!formState.isEditing) {
+        setStartTime(initialState.startTime);
+        setBreakTime(initialState.breakTime);
+        setEndTime(initialState.endTime);
+        setTasks([]);
+        setWorkingTime("");
+        dispatch({ type: EditActionType.CHECK_SAVED, payload: false });
+      }
+    });
+
+    // monthlyData から該当日を参照（空配列でも正しく「データなし」と判定される）
+    const data = getKintaiDataFromMonthlyData(deferredDate, monthlyData);
+
+    if (data) {
+      const hasStartTime = data.startTime && data.startTime.trim() !== "";
+      const breakTimeAsString = formatBreakTime(data.breakTime);
+
+      startTransition(() => {
+        setStartTime(data.startTime || initialState.startTime);
+        setBreakTime(breakTimeAsString);
+        setEndTime(data.endTime || initialState.endTime);
+        if (data.tasks && data.tasks.length > 0) {
+          setTasks(data.tasks);
+        } else if (data.location) {
+          setTasks([{ job: data.location, hours: 0 }]);
+        } else {
+          setTasks([]);
+        }
+        setWorkingTime(data.workingTime || "");
+        dispatch({
+          type: EditActionType.CHECK_SAVED,
+          payload: !!hasStartTime,
+        });
+        setIsDataLoading(false);
+      });
+    } else {
+      // データなし：初期状態のまま
+      startTransition(() => setIsDataLoading(false));
+    }
+
+    setTooOldDateWarning(isDateTooOld(deferredDate));
+
     // 日付変更時はdirty解除し、前回日付を更新
     isDirtyRef.current = false;
     prevDateRef.current = deferredDate;
-  }, [deferredDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deferredDate, monthlyData, currentYear, currentMonth, isContextLoading]);
 
   // スライドアニメーション用の状態
   const [isAnimating, setIsAnimating] = useState(false);
@@ -445,18 +509,40 @@ const KintaiForm: React.FC = () => {
     }, 75);
   };
 
+  // 出退勤/休憩変更時にtasksの最後の作業を自動調整
+  const autoAdjustTasks = (totalMinutes: number) => {
+    if (totalMinutes <= 0) return;
+    setTasks((prev) => {
+      if (prev.length === 0) return prev;
+      if (prev.length === 1) {
+        return [{ ...prev[0], hours: minutesToHours(totalMinutes) }];
+      }
+      const usedByOthers = prev
+        .slice(0, -1)
+        .reduce((sum, t) => sum + (t.hours || 0) * 60, 0);
+      const lastMinutes = Math.max(0, totalMinutes - usedByOthers);
+      const updated = [...prev];
+      updated[updated.length - 1] = {
+        ...updated[updated.length - 1],
+        hours: minutesToHours(lastMinutes),
+      };
+      return updated;
+    });
+  };
+
   const handleStartTimeChange = (time: string) => {
     setStartTime(time);
     isDirtyRef.current = true;
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
+    autoAdjustTasks(getWorkingMinutes(time, endTime, breakTime));
     validateForm({
       date: formState.date,
       startTime: time,
       breakTime,
       endTime,
-      location,
+      tasks,
     });
   };
 
@@ -466,12 +552,13 @@ const KintaiForm: React.FC = () => {
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
+    autoAdjustTasks(getWorkingMinutes(startTime, endTime, timeString));
     validateForm({
       date: formState.date,
       startTime,
       breakTime: timeString,
       endTime,
-      location,
+      tasks,
     });
   };
 
@@ -481,38 +568,88 @@ const KintaiForm: React.FC = () => {
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
+    autoAdjustTasks(getWorkingMinutes(startTime, time, breakTime));
     validateForm({
       date: formState.date,
       startTime,
       breakTime,
       endTime: time,
-      location,
+      tasks,
     });
   };
 
-  const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setLocation(e.target.value);
+  // 作業操作ハンドラ
+  const handleAddTask = () => {
+    const totalMinutes = getWorkingMinutes(startTime, endTime, breakTime);
+    const usedMinutes = tasks.reduce(
+      (sum, t) => sum + (t.hours || 0) * 60,
+      0,
+    );
+    const remainMinutes = Math.max(0, totalMinutes - usedMinutes);
+    setTasks((prev) => [
+      ...prev,
+      { job: "", hours: minutesToHours(remainMinutes) },
+    ]);
     isDirtyRef.current = true;
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
-    validateForm({
-      date: formState.date,
-      startTime,
-      breakTime,
-      endTime,
-      location: e.target.value,
+  };
+
+  const handleRemoveTask = (index: number) => {
+    if (tasks.length <= 1) return;
+    setTasks((prev) => prev.filter((_, i) => i !== index));
+    isDirtyRef.current = true;
+  };
+
+  const handleTaskJobChange = (index: number, job: string) => {
+    setTasks((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, job } : t)),
+    );
+    isDirtyRef.current = true;
+    if (!formState.isEditing) {
+      dispatch({ type: EditActionType.START_EDITING });
+    }
+  };
+
+  const handleTaskHoursChange = (index: number, hours: number) => {
+    setTasks((prev) => {
+      const updated = prev.map((t, i) =>
+        i === index ? { ...t, hours } : t,
+      );
+      const totalMinutes = getWorkingMinutes(startTime, endTime, breakTime);
+      if (totalMinutes > 0 && index !== prev.length - 1 && prev.length > 1) {
+        const usedByOthers = updated
+          .slice(0, -1)
+          .reduce((sum, t) => sum + (t.hours || 0) * 60, 0);
+        const lastMinutes = Math.max(0, totalMinutes - usedByOthers);
+        updated[prev.length - 1] = {
+          ...updated[prev.length - 1],
+          hours: minutesToHours(lastMinutes),
+        };
+      }
+      return updated;
     });
+    isDirtyRef.current = true;
+    if (!formState.isEditing) {
+      dispatch({ type: EditActionType.START_EDITING });
+    }
   };
 
   // フォーム検証
   const validateForm = (data: KintaiData): boolean => {
     const newErrors: ValidationErrors = {};
 
-    // 勤務場所の必須チェック
-    if (!data.location || data.location.trim() === "") {
-      newErrors.location =
-        "勤務場所を選択してください / Please select a work location";
+    // 作業内容の必須チェック
+    if (!data.tasks || data.tasks.length === 0) {
+      newErrors.tasks =
+        "作業を追加してください / Please add a task";
+    } else if (data.tasks.some((t) => !t.job)) {
+      newErrors.tasks =
+        "作業内容を選択してください / Please select task type";
+    } else if (data.tasks.some((t) => !t.hours || t.hours <= 0)) {
+      newErrors.tasks =
+        "作業時間を入力してください / Please enter hours";
     }
 
     // 出勤時間が退勤時間より前かチェック
@@ -534,7 +671,8 @@ const KintaiForm: React.FC = () => {
       startTime,
       breakTime,
       endTime,
-      location,
+      tasks,
+      location: tasks.map((t) => t.job).join(", "),
     };
 
     const isValid = validateForm(formData);
@@ -573,10 +711,10 @@ const KintaiForm: React.FC = () => {
                 ? refreshed.endTime
                 : formData.endTime,
             );
-            setLocation(
-              refreshed?.location !== undefined
-                ? refreshed.location
-                : formData.location || "",
+            setTasks(
+              refreshed?.tasks && refreshed.tasks.length > 0
+                ? refreshed.tasks
+                : formData.tasks || [],
             );
             setWorkingTime(refreshed?.workingTime || "");
             // 「未入力」表示を防ぐため、保存済み判定も更新
@@ -630,6 +768,7 @@ const KintaiForm: React.FC = () => {
         startTime: "",
         breakTime: "",
         endTime: "",
+        tasks: [],
         location: "",
       });
 
@@ -645,7 +784,7 @@ const KintaiForm: React.FC = () => {
       setStartTime("");
       setBreakTime("");
       setEndTime("");
-      setLocation("");
+      setTasks([]);
       setWorkingTime("");
 
       // 編集終了
@@ -844,39 +983,115 @@ const KintaiForm: React.FC = () => {
           </div>
         </div>
 
-        {/* 勤務場所 */}
-        <div className="form-group">
-          <label>勤務場所 / Work Task</label>
-          <select
-            value={location}
-            onChange={handleLocationChange}
-            disabled={
-              isDataLoading ||
-              (formState.isSaved && !formState.isEditing) ||
-              isVeryOldDate()
-            }
-            className={`location-select ${!(isDataLoading || (formState.isSaved && !formState.isEditing) || isVeryOldDate()) ? "location-input-enabled" : ""} ${!location || location === "" ? "input-empty" : ""}`}
-          >
-            <option value="">未選択 / Not selected</option>
-            {jobOptions && jobOptions.length > 0 ? (
-              jobOptions.map((opt) => (
-                <option key={opt.job} value={opt.job}>
-                  {opt.job}
-                  {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
-                </option>
-              ))
-            ) : (
-              <>
-                <option value="田んぼ">田んぼ / Rice field</option>
-                <option value="柿農園">柿農園 / Persimmon farm</option>
-                <option value="事務所">事務所 / Office</option>
-                <option value="その他">その他 / Other</option>
-              </>
-            )}
-          </select>
+        {/* 作業内容 */}
+        <div className="form-group task-section">
+          <label>作業内容 / Work Tasks</label>
+          {tasks.map((task, index) => (
+            <div key={index} className="task-row">
+              <select
+                value={task.job}
+                onChange={(e) => handleTaskJobChange(index, e.target.value)}
+                onFocus={loadJobOptions}
+                onMouseDown={loadJobOptions}
+                disabled={
+                  isDataLoading ||
+                  (formState.isSaved && !formState.isEditing) ||
+                  isVeryOldDate()
+                }
+                className={`task-job-select ${!task.job ? "input-empty" : ""}`}
+              >
+                <option value="">未選択</option>
+                {jobOptions && jobOptions.length > 0 ? (
+                  jobOptions.map((opt) => (
+                    <option key={opt.job} value={opt.job}>
+                      {opt.job}
+                      {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="田んぼ">田んぼ</option>
+                    <option value="柿農園">柿農園</option>
+                    <option value="事務所">事務所</option>
+                    <option value="その他">その他</option>
+                  </>
+                )}
+              </select>
+              <div className="task-hours-picker-wrapper">
+                <DrumTimePicker
+                  label="作業時間"
+                  value={hoursToHHmm(task.hours)}
+                  onChange={(val) =>
+                    handleTaskHoursChange(index, hhmmToHours(val))
+                  }
+                  disabled={
+                    isDataLoading ||
+                    (formState.isSaved && !formState.isEditing) ||
+                    isVeryOldDate()
+                  }
+                />
+              </div>
+              {tasks.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveTask(index)}
+                  disabled={
+                    isDataLoading ||
+                    (formState.isSaved && !formState.isEditing) ||
+                    isVeryOldDate()
+                  }
+                  className="task-remove-btn"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          {!(
+            isDataLoading ||
+            (formState.isSaved && !formState.isEditing) ||
+            isVeryOldDate()
+          ) && (
+            <button
+              type="button"
+              onClick={handleAddTask}
+              onMouseEnter={loadJobOptions}
+              onTouchStart={loadJobOptions}
+              className="task-add-btn"
+            >
+              + 作業を追加 / Add Task
+            </button>
+          )}
+          {tasks.length > 0 &&
+            (() => {
+              const tasksTotalMinutes = tasks.reduce(
+                (sum, t) => sum + (t.hours || 0) * 60,
+                0,
+              );
+              const wtMinutes = (() => {
+                if (!workingTime) return 0;
+                const [h, m] = workingTime.split(":").map(Number);
+                return h * 60 + (m || 0);
+              })();
+              const isOver =
+                wtMinutes > 0 && tasksTotalMinutes > wtMinutes;
+              const totalH = Math.floor(tasksTotalMinutes / 60);
+              const totalM = Math.round(tasksTotalMinutes % 60);
+              return (
+                <div
+                  className={`task-summary ${isOver ? "over-hours" : ""}`}
+                >
+                  作業合計: {totalH}:
+                  {String(totalM).padStart(2, "0")}
+                  {workingTime
+                    ? ` / 勤務時間: ${workingTime}`
+                    : ""}
+                </div>
+              );
+            })()}
         </div>
-        {errors.location && (
-          <div className="error-message">{errors.location}</div>
+        {errors.tasks && (
+          <div className="error-message">{errors.tasks}</div>
         )}
 
         {/* エラーメッセージ */}
@@ -1020,8 +1235,8 @@ const KintaiForm: React.FC = () => {
             <p
               style={{ margin: "0 0 24px 0", color: "#666", lineHeight: "1.5" }}
             >
-              出勤時間、休憩時間、退勤時間、勤務場所のデータが削除されます。 /
-              Clock‑in, break, clock‑out, and location data will be deleted.
+              出勤時間、休憩時間、退勤時間、作業内容のデータが削除されます。 /
+              Clock‑in, break, clock‑out, and task data will be deleted.
             </p>
             <div
               style={{

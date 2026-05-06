@@ -422,7 +422,7 @@ const MonthlyView: React.FC = () => {
               <th className="col-time">退勤 / Out</th>
               <th className="col-break">休憩 / Break</th>
               <th className="col-worktime">勤務時間 / Work Time</th>
-              <th className="col-location">勤務場所 / Location</th>
+              <th className="col-location">作業内容 / Tasks</th>
             </tr>
           </thead>
           <tbody>
@@ -454,7 +454,18 @@ const MonthlyView: React.FC = () => {
                     <td className="col-worktime">
                       {formatWorkTime(record.workingTime)}
                     </td>
-                    <td className="col-location">{record.location || "-"}</td>
+                    <td className="col-location">
+                      {record.tasks && record.tasks.length > 0
+                        ? record.tasks.map((t, i) => (
+                            <div key={i}>
+                              {t.job}
+                              {t.hours > 0
+                                ? ` (${Math.floor(t.hours)}:${String(Math.round((t.hours % 1) * 60)).padStart(2, "0")})`
+                                : ""}
+                            </div>
+                          ))
+                        : record.location || "-"}
+                    </td>
                   </tr>
                 );
               })

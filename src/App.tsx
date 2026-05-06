@@ -36,6 +36,21 @@ const App: React.FC = () => {
       window.location.href = "/login";
     }
 
+    // 前回の APPLY_UPDATE で埋めたフラグをチェック → 24h以内なら軽量通知
+    try {
+      const updatedAt = localStorage.getItem("kintai_updated_at");
+      if (updatedAt) {
+        const elapsed = Date.now() - parseInt(updatedAt, 10);
+        if (elapsed > 0 && elapsed < 24 * 60 * 60 * 1000) {
+          // eslint-disable-next-line no-console
+          console.info("[kintai] 新しいバージョンに更新されました");
+        }
+        localStorage.removeItem("kintai_updated_at");
+      }
+    } catch {
+      // localStorage エラーは無視
+    }
+
     // Service Workerの登録とバックグラウンド同期の初期化
     initializeServiceWorker();
   }, []);
@@ -44,8 +59,10 @@ const App: React.FC = () => {
   const initializeServiceWorker = async () => {
     if ("serviceWorker" in navigator) {
       try {
+        performance.mark("PWA:sw-register-start");
         // SW 登録
         const registration = await navigator.serviceWorker.register("/sw.js");
+        performance.mark("PWA:sw-registered");
 
         // メッセージ受信リスナー
         navigator.serviceWorker.addEventListener(
@@ -61,6 +78,7 @@ const App: React.FC = () => {
         // SW が制御状態になるのを待ってからメッセージ送信
         const readyRegistration = await navigator.serviceWorker.ready;
         swRegistrationRef.current = readyRegistration;
+        performance.mark("PWA:check-for-updates");
         readyRegistration.active?.postMessage({ type: "CHECK_FOR_UPDATES" });
       } catch (error) {
         // Service Worker登録失敗時は通常起動
@@ -130,9 +148,16 @@ const App: React.FC = () => {
       }
 
       case "UPDATE_APPLIED":
-        // 更新適用完了 → 安全に再起動
+        // 更新適用完了: 現在のセッションはそのまま継続（ハッシュ付きアセットなので無害）
+        // 新バージョンは次回起動時に自然適用される（HTMLは毎回ネットワーク優先 = no-cache ヘッダー）
+        // フルリロード（window.location.reload）は廃止: 作業中断とキャッシュ再取得による遅延を回避
         setShowVersionCheckModal(false);
-        window.location.reload();
+        try {
+          // 次回起動時に軽量通知を出すためのフラグ
+          localStorage.setItem("kintai_updated_at", String(Date.now()));
+        } catch {
+          // localStorage 書き込み失敗は無視
+        }
         break;
 
       case "UPDATE_FAILED":
