@@ -305,29 +305,95 @@ Auth.storeToken = function(token, userId, userName, spreadsheetId) {
 };
 
 /**
+ * Phase 3: HMAC-SHA256 トークン検証（Netlify auth-login Function 発行）
+ *  - フォーマット: header.payload.signature (3 セグメント、base64url)
+ *  - 共有秘密鍵: Script Properties の NETLIFY_AUTH_SECRET
+ *  - 旧形式 (token_xxx in PropertiesService) との dual support
+ */
+Auth.verifyHmacToken = function(token) {
+  try {
+    if (!token || typeof token !== 'string') return { valid: false };
+    var parts = token.split('.');
+    if (parts.length !== 3) return { valid: false }; // 3 segment でなければ旧形式
+
+    var secret = PropertiesService.getScriptProperties().getProperty('NETLIFY_AUTH_SECRET');
+    if (!secret) return { valid: false, reason: 'no_shared_secret' };
+
+    // HMAC 再計算
+    var unsigned = parts[0] + '.' + parts[1];
+    var sigBytes = Utilities.computeHmacSha256Signature(unsigned, secret);
+    var expectedSig = Utilities.base64EncodeWebSafe(sigBytes).replace(/=+$/, '');
+
+    if (expectedSig !== parts[2]) return { valid: false, reason: 'sig_mismatch' };
+
+    // payload デコード（base64url）
+    // base64url は = padding が省略されている場合があるので補完
+    var payloadB64 = parts[1];
+    while (payloadB64.length % 4) payloadB64 += '=';
+    var payloadStr = Utilities.newBlob(Utilities.base64DecodeWebSafe(payloadB64)).getDataAsString();
+    var payload = JSON.parse(payloadStr);
+
+    // 有効期限チェック
+    var nowSec = Math.floor(new Date().getTime() / 1000);
+    if (!payload.exp || payload.exp < nowSec) {
+      return { valid: false, reason: 'expired' };
+    }
+
+    return {
+      valid: true,
+      userId: payload.sub,
+      userName: payload.name,
+      spreadsheetId: payload.sid,
+      iat: payload.iat,
+      exp: payload.exp,
+      _format: 'hmac'
+    };
+  } catch (e) {
+    return { valid: false, reason: 'parse_error', error: String(e) };
+  }
+};
+
+/**
  * トークンを検証
+ *  - 新形式 (HMAC) を先に試行
+ *  - 旧形式 (PropertiesService) にフォールバック
+ *  - 両形式で互換動作する移行期間用
  */
 Auth.checkToken = function(token) {
+  // 新形式: 3 セグメント (header.payload.signature) なら HMAC 検証
+  if (typeof token === 'string' && token.split('.').length === 3) {
+    var hmacResult = Auth.verifyHmacToken(token);
+    if (hmacResult.valid) {
+      return {
+        valid: true,
+        userId: hmacResult.userId,
+        userName: hmacResult.userName,
+        spreadsheetId: hmacResult.spreadsheetId
+      };
+    }
+    // HMAC 形式だが署名・期限・秘密鍵で失敗 → 旧形式フォールバックは試さない（無意味）
+    return { valid: false, reason: hmacResult.reason || 'hmac_fail' };
+  }
+
+  // 旧形式: PropertiesService の token_xxx
   try {
-    const scriptProps = PropertiesService.getScriptProperties();
-    const stored = scriptProps.getProperty('token_' + token);
-    
+    var scriptProps = PropertiesService.getScriptProperties();
+    var stored = scriptProps.getProperty('token_' + token);
+
     if (!stored) {
       return { valid: false };
     }
-    
+
     try {
-      const tokenInfo = JSON.parse(stored);
-      
+      var tokenInfo = JSON.parse(stored);
+
       // 有効期限チェック（expiresが設定されている場合のみ）
       if (tokenInfo.expires && tokenInfo.expires < new Date().getTime()) {
-        // 期限切れならトークンを削除
         scriptProps.deleteProperty('token_' + token);
         return { valid: false, reason: 'expired' };
       }
-      // expiresが設定されていない場合は期限切れチェックをスキップ（ログアウトまで有効）
-      
-      return { valid: true, ...tokenInfo };
+
+      return { valid: true, ...tokenInfo, _format: 'legacy' };
     } catch (parseErr) {
       return { valid: false, error: String(parseErr) };
     }

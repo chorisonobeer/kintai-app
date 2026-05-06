@@ -55,34 +55,12 @@ export default defineConfig(({ command, mode }) => {
       port: 5173,
       host: true,
       proxy: {
-        // Netlify Functions用のプロキシ設定（開発時にNetlify Devを使用する場合）
-        "^/\.netlify/functions/.*": {
+        // Netlify Functions用のプロキシ（dev で localhost:8888 経由）
+        // GAS は kintai-api Function の中から直接呼び出すので、ここで GAS URL は持たない
+        "^/\\.netlify/functions/.*": {
           target: "http://localhost:8888",
           changeOrigin: true,
           rewrite: (path) => path,
-        },
-        // GAS API用のプロキシ設定（開発時に直接GASを呼び
-        // 出す場合）
-        "/api/gas": {
-          target:
-            "https://script.google.com/macros/s/AKfycbz3JiuOyBvPpzS3OfuQYktTcm85FP-uyegWGpMfhL-DMVJbaeiJ2tIL3XpcLbaoMoazBg",
-          changeOrigin: true,
-          secure: true,
-          rewrite: (path) => "/exec",
-          configure: (proxy, options) => {
-            proxy.on("proxyReq", (proxyReq, req, res) => {
-              // CORSヘッダーを追加
-              proxyReq.setHeader("Origin", "http://localhost:5173");
-            });
-            proxy.on("proxyRes", (proxyRes, req, res) => {
-              // レスポンスにCORSヘッダーを追加
-              proxyRes.headers["Access-Control-Allow-Origin"] = "*";
-              proxyRes.headers["Access-Control-Allow-Methods"] =
-                "GET, POST, OPTIONS";
-              proxyRes.headers["Access-Control-Allow-Headers"] =
-                "Content-Type, Authorization";
-            });
-          },
         },
       },
     },

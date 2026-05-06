@@ -1,947 +1,370 @@
 /**
- * /GAS/kintai.gs
- * 2025-11-07T10:00+09:00
- * 変更概要: 更新 - 月次データ取得を範囲限定読込に最適化（EPIC-1）
- */
-/**
- * kintai.gs
- * 2025-06-03T12:00+09:00
- * 変更概要: 更新 - 勤怠管理関連の機能を提供するモジュール（日付型対応、勤務場所対応、行位置特定アルゴリズム追加）
- * JSDoc型定義追加 - 詳細な型情報とドキュメントを追加
- */
-
-/**
- * @typedef {Object} KintaiPayload
- * @property {string} date - 勤怠日付（YYYY-MM-DD、YYYY/MM/DD、または日本語形式）
- * @property {string} startTime - 出勤時間（HH:mm形式）
- * @property {string} breakTime - 休憩時間（HH:mm形式）
- * @property {string} endTime - 退勤時間（HH:mm形式）
- * @property {string} spreadsheetId - Google SpreadsheetのID
- * @property {string} userId - ユーザーID
- * @property {string} [location] - 勤務場所（後方互換用、オプション）
- * @property {Array<{job: string, hours: number}>} [tasks] - 作業内容配列（オプション）
+ * GAS/kintai.gs                                                  2026-05-06
+ * ─────────────────────────────────────────────────────────────────────
+ *  勤怠データの保存・取得（Google Sheets バックエンド）
+ *
+ *  認証は Netlify Function で完結し、ここでは Auth.checkToken による
+ *  HMAC 署名検証のみを行う。レガシー PropertiesService 経路も
+ *  Auth.checkToken 内で互換維持される。
+ *
+ *  公開 API:
+ *    - Kintai.handleSaveKintai      (action: saveKintai)
+ *    - Kintai.handleGetMonthlyData  (action: getMonthlyData)
+ *
+ *  シート列レイアウト（個人勤怠 sheet「データ」タブ）:
+ *    A: 日付   B: 月    C: 出勤   D: 休憩   E: 退勤
+ *    F: 勤務時間（数式 =IF(E<C, E+1-C-D, E-C-D)）
+ *    G: 作業内容（JSON: [{job, hours}, ...]、空文字は未入力）
+ * ─────────────────────────────────────────────────────────────────────
  */
 
 /**
- * @typedef {Object} MonthlyDataPayload
- * @property {string} spreadsheetId - Google SpreadsheetのID
- * @property {string} userId - ユーザーID
- * @property {number} year - 取得対象年
- * @property {number} month - 取得対象月
+ * @typedef {{date:string, startTime:string, breakTime:string, endTime:string,
+ *            spreadsheetId:string, userId:string,
+ *            location?:string, tasks?:Array<{job:string,hours:number}>}} KintaiPayload
+ * @typedef {{spreadsheetId:string, userId:string, year:number, month:number}} MonthlyDataPayload
+ * @typedef {{date:string, month:number, startTime:string, breakTime:string,
+ *            endTime:string, workingTime:string, location:string,
+ *            tasks:Array<{job:string,hours:number}>}} KintaiRecord
  */
 
-/**
- * @typedef {Object} DiagnosticInfo
- * @property {string} stage - 処理段階
- * @property {boolean} [noToken] - トークン未指定フラグ
- * @property {boolean} [tokenValid] - トークン有効性
- * @property {string} [tokenError] - トークンエラー詳細
- * @property {boolean} [missingParams] - 必須パラメータ不足フラグ
- * @property {string} [missingParam] - 不足パラメータ名
- * @property {string} [sheetError] - シートエラー詳細
- * @property {string} [workingTime] - 計算された勤務時間
- * @property {string} [normalizedDate] - 正規化された日付
- * @property {number} [rowIndex] - 更新行番号
- * @property {string} [monthValue] - 月の値
- * @property {boolean} [updated] - 更新完了フラグ
- * @property {number} [rowUpdated] - 更新された行番号
- * @property {string} [saveError] - 保存エラー詳細
- * @property {string} [calcError] - 計算エラー詳細
- * @property {string} [rowError] - 行特定エラー詳細
- * @property {string} [error] - 一般エラー詳細
- */
-
-/**
- * @typedef {Object} TokenInfo
- * @property {boolean} valid - トークンの有効性
- * @property {string} [userId] - ユーザーID
- * @property {number} [exp] - 有効期限（Unix timestamp）
- */
-
-/**
- * @typedef {Object} ApiResponse
- * @property {boolean} ok - 処理成功フラグ
- * @property {string} [err] - エラーメッセージ
- * @property {*} [data] - レスポンスデータ
- * @property {DiagnosticInfo} [debug] - デバッグ情報
- */
-
-/**
- * @typedef {Object} KintaiRecord
- * @property {string} date - 日付
- * @property {number} month - 月
- * @property {string} startTime - 出勤時間
- * @property {string} breakTime - 休憩時間
- * @property {string} endTime - 退勤時間
- * @property {string} workingTime - 勤務時間
- * @property {string} location - 勤務場所（互換用サマリ文字列）
- * @property {Array<{job: string, hours: number}>} tasks - 作業内容配列
- */
-
-// Kintaiオブジェクトの定義
 const Kintai = {};
 
+// ════════════════════════════════════════════════════════════════════
+//   公開 API
+// ════════════════════════════════════════════════════════════════════
+
 /**
- * 勤怠データの保存
- * @param {KintaiPayload} payload - 勤怠データのペイロード
- * @param {string} token - 認証トークン
- * @param {boolean} debug - デバッグモードフラグ
- * @param {DiagnosticInfo} [diagInfo={}] - 診断情報オブジェクト
- * @returns {ApiResponse} API応答オブジェクト
- * @description 勤怠データをGoogle Spreadsheetに保存する。トークン検証、パラメータチェック、
- *              勤務時間計算、データ正規化、行位置特定を行い、スプレッドシートに書き込む。
+ * 勤怠データの保存（既存行は更新、なければ計算で算出した行に書込）。
+ * 全フィールドが空 + tasks 空 = 削除扱い（C/E/G を空にし F 数式は温存）。
  */
-Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
+Kintai.handleSaveKintai = function(payload, token, debug, diagInfo) {
+  diagInfo = diagInfo || {};
   diagInfo.stage = 'saveKintai';
-  
+  diagInfo.handlerVersion = 'slim-2026-05-06';  // ← 新版判別マーカー
+
+  // 1. 認証
+  var authErr = _requireValidToken(token, diagInfo);
+  if (authErr) return _err(authErr.err, debug, diagInfo);
+
+  // 2. パラメータ検証
+  var p = payload || {};
+  var hasTasks = Array.isArray(p.tasks) && p.tasks.length > 0;
+  var hasLocation = p.location && String(p.location).trim() !== '';
+  var isDelete = !p.startTime && !p.endTime && !hasLocation && !hasTasks;
+  diagInfo.isDelete = isDelete;
+
+  if (!p.date || !p.spreadsheetId) {
+    diagInfo.missingParams = true;
+    return _err('必須パラメータが不足しています', debug, diagInfo);
+  }
+  if (!isDelete && (!p.userId || !p.startTime || !p.endTime)) {
+    diagInfo.missingParams = true;
+    return _err('必須パラメータが不足しています', debug, diagInfo);
+  }
+
+  // 3. シート取得
+  var sheet;
   try {
-    // トークン検証
-    if (!token) {
-      diagInfo.noToken = true;
-      return Utils.createResponse({
-        ok: false,
-        err: 'トークン未指定',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    diagInfo.stage = 'token_verification';
-    /** @type {TokenInfo} */
-    let tokenInfo;
-    try {
-      tokenInfo = Auth.checkToken(token);
-      diagInfo.tokenValid = tokenInfo.valid;
-      
-      if (!tokenInfo.valid) {
-        return Utils.createResponse({
-          ok: false,
-          err: 'トークンが無効です',
-          debug: debug ? diagInfo : undefined
-        });
-      }
-    } catch (tokenErr) {
-      diagInfo.tokenError = String(tokenErr);
-      return Utils.createResponse({
-        ok: false,
-        err: 'トークン検証エラー',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // 必須パラメータチェック
-    diagInfo.stage = 'parameter_check';
-    /** @type {string} */
-    const { date, startTime, breakTime, endTime, spreadsheetId, userId, location, tasks } = payload;
-
-    // 削除意図の判定（時間が空、かつ勤務地も未指定、かつtasksも空なら削除）
-    // breakTime は空文字/"00:00" など多様な表現がありうるため削除判定から除外
-    /** @type {boolean} */
-    const hasTasks = Array.isArray(tasks) && tasks.length > 0;
-    const isDelete = (!startTime && !endTime && (!location || String(location).trim() === '') && !hasTasks);
-    diagInfo.isDelete = isDelete;
-    
-    // 削除時は date/spreadsheetId のみ必須。通常保存では startTime/endTime と userId 必須
-    if (!date || !spreadsheetId || (!isDelete && (!userId || !startTime || !endTime))) {
-      diagInfo.missingParams = true;
-      return Utils.createResponse({
-        ok: false,
-        err: '必須パラメータが不足しています',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // スプレッドシートアクセス
-    diagInfo.stage = 'spreadsheet_access';
-    /** @type {GoogleAppsScript.Spreadsheet.Spreadsheet} */
-    let ss;
-    /** @type {GoogleAppsScript.Spreadsheet.Sheet} */
-    let sheet;
-    try {
-      ss = SpreadsheetApp.openById(spreadsheetId);
-      sheet = ss.getSheetByName('データ');
-      
-      if (!sheet) {
-        diagInfo.sheetError = 'データシートが見つかりません';
-        return Utils.createResponse({
-          ok: false,
-          err: 'データシートが見つかりません',
-          debug: debug ? diagInfo : undefined
-        });
-      }
-    } catch (sheetErr) {
-      diagInfo.sheetError = String(sheetErr);
-      return Utils.createResponse({
-        ok: false,
-        err: 'スプレッドシートアクセスエラー',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // 勤務時間の計算（診断情報用のみ、スプレッドシートには書き込まない）
-    diagInfo.stage = 'calc_working_time';
-    /** @type {string|number} */
-    let workingTime = 0;
-    try {
-      if (!isDelete && startTime && endTime) {
-        // 勤務時間計算（時:分形式の時間から計算）
-        /** @type {string[]} */
-        const startParts = startTime.split(':');
-        /** @type {string[]} */
-        const endParts = endTime.split(':');
-        
-        /** @type {number} */
-        const startMinutes = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
-        /** @type {number} */
-        const endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
-        
-        // 休憩時間を分で計算（HH:mm形式から）
-        /** @type {number} */
-        let breakMinutes = 0;
-        if (breakTime && breakTime.includes(':')) {
-          /** @type {string[]} */
-          const breakParts = breakTime.split(':');
-          breakMinutes = parseInt(breakParts[0], 10) * 60 + parseInt(breakParts[1], 10);
-        }
-        
-        /** @type {number} */
-        const totalMinutes = endMinutes - startMinutes - breakMinutes;
-        
-        if (totalMinutes > 0) {
-          /** @type {number} */
-          const workHours = Math.floor(totalMinutes / 60);
-          /** @type {number} */
-          const workMins = totalMinutes % 60;
-          workingTime = `${workHours}:${workMins.toString().padStart(2, '0')}`;
-        } else {
-          workingTime = '0:00';
-        }
-      } else {
-        // 削除時は勤務時間を0:00として扱う
-        workingTime = '0:00';
-      }
-      diagInfo.workingTime = workingTime;
-    } catch (calcErr) {
-      diagInfo.calcError = String(calcErr);
-      workingTime = 0;
-    }
-    
-    // データを保存
-    diagInfo.stage = 'save_data';
-    try {
-      // 日付を正規化してYYYY/MM/DD形式に変換
-      /** @type {string} */
-      const normalizedDate = normalizeDate(date);
-      diagInfo.normalizedDate = normalizedDate;
-      
-      // 行番号を検索または計算
-      /** @type {number} */
-      const rowIndex = findOrCalculateRowByDate(sheet, normalizedDate);
-      diagInfo.rowIndex = rowIndex;
-      
-      if (rowIndex <= 0) {
-        diagInfo.rowError = '行の特定に失敗しました';
-        return Utils.createResponse({
-          ok: false,
-          err: '行の特定に失敗しました',
-          debug: debug ? diagInfo : undefined
-        });
-      }
-      
-      // 日付から月を抽出（B列用）
-      /** @type {number|string} */
-      const monthValue = extractMonthValue(normalizedDate);
-      diagInfo.monthValue = monthValue;
-      
-      // データを準備（スプレッドシートの列に合わせる）
-      // C列: 出勤時間、D列: 休憩時間、E列: 退勤時間
-      // F列: 勤務時間（数式で再設定）
-      // G列: 作業内容（JSON形式）
-      // A列（日付）、B列（月）は書き込み禁止
-
-      // G列に書き込むJSON値を生成
-      /** @type {string} */
-      let gValue = '';
-      if (!isDelete) {
-        if (hasTasks) {
-          // 新形式: tasks配列をJSON化
-          gValue = JSON.stringify(tasks);
-        } else if (location && String(location).trim() !== '') {
-          // 旧形式互換: 単一locationを1件のtasks配列に変換
-          gValue = JSON.stringify([{ job: String(location).trim(), hours: 0 }]);
-        }
-        // どちらも該当しない場合: gValue = '' (空文字のまま)
-      }
-
-      if (isDelete) {
-        // 削除時: C~E列とG列を空にする。F列の既存数式は温存（触らない）
-        sheet.getRange(rowIndex, 3, 1, 3).setValues([['', '', '']]);
-        sheet.getRange(rowIndex, 7, 1, 1).setValue('');
-      } else {
-        // (1) C~E列: 出勤・休憩・退勤を一括書き込み
-        sheet.getRange(rowIndex, 3, 1, 3).setValues([
-          [startTime, formatBreakTime(breakTime), endTime]
-        ]);
-
-        // (2) F列: 勤務時間の数式を設定
-        //     setFormula()を使用（setValues()ではリテラル文字列になるため）
-        //     失敗してもC~E+Gは保存済みなので、エラーにせず診断情報に記録のみ
-        try {
-          const fFormula = '=IF(E' + rowIndex + '<C' + rowIndex
-            + ',(E' + rowIndex + '+1)-C' + rowIndex + '-D' + rowIndex
-            + ',E' + rowIndex + '-C' + rowIndex + '-D' + rowIndex + ')';
-          sheet.getRange(rowIndex, 6, 1, 1).setFormula(fFormula);
-        } catch (formulaErr) {
-          diagInfo.formulaError = String(formulaErr);
-        }
-
-        // (3) G列: 作業内容JSONを書き込み
-        sheet.getRange(rowIndex, 7, 1, 1).setValue(gValue);
-      }
-
-      diagInfo.gValue = gValue;
-      diagInfo.updated = true;
-      diagInfo.rowUpdated = rowIndex;
-      
-      return Utils.createResponse({
-        ok: true,
-        debug: debug ? diagInfo : undefined
-      });
-    } catch (saveErr) {
-      diagInfo.saveError = String(saveErr);
-      return Utils.createResponse({
-        ok: false,
-        err: 'データ保存エラー',
-        debug: debug ? diagInfo : undefined
-      });
+    sheet = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName('データ');
+    if (!sheet) {
+      diagInfo.sheetError = 'データシートが見つかりません';
+      return _err('データシートが見つかりません', debug, diagInfo);
     }
   } catch (e) {
-    diagInfo.error = String(e);
-    return Utils.createResponse({
-      ok: false,
-      err: '勤怠データ保存処理エラー',
-      debug: debug ? diagInfo : undefined
-    });
+    diagInfo.sheetError = String(e);
+    return _err('スプレッドシートアクセスエラー', debug, diagInfo);
+  }
+
+  // 4. 行特定
+  diagInfo.stage = 'find_row';
+  var normalizedDate = _normalizeDate(p.date);
+  diagInfo.normalizedDate = normalizedDate;
+  var rowIndex = _findOrCalculateRowByDate(sheet, normalizedDate);
+  diagInfo.rowIndex = rowIndex;
+  if (rowIndex <= 0) return _err('行の特定に失敗しました', debug, diagInfo);
+
+  // 5. 書込
+  diagInfo.stage = 'write';
+  try {
+    if (isDelete) {
+      // 削除: C-E と G を空にする。F 数式は温存
+      sheet.getRange(rowIndex, 3, 1, 3).setValues([['', '', '']]);
+      sheet.getRange(rowIndex, 7).setValue('');
+    } else {
+      // 通常保存: C-E 一括書込、F 数式再設定、G に tasks JSON
+      sheet.getRange(rowIndex, 3, 1, 3).setValues([
+        [p.startTime, _formatBreakTime(p.breakTime), p.endTime]
+      ]);
+
+      // F 列: 失敗してもレコード本体は保存済みとして許容
+      try {
+        var fFormula = '=IF(E' + rowIndex + '<C' + rowIndex
+          + ',(E' + rowIndex + '+1)-C' + rowIndex + '-D' + rowIndex
+          + ',E' + rowIndex + '-C' + rowIndex + '-D' + rowIndex + ')';
+        sheet.getRange(rowIndex, 6).setFormula(fFormula);
+      } catch (formulaErr) {
+        diagInfo.formulaError = String(formulaErr);
+      }
+
+      sheet.getRange(rowIndex, 7).setValue(_buildGValue(p.tasks, p.location));
+    }
+
+    diagInfo.stage = 'done';
+    diagInfo.updated = true;
+    return Utils.createResponse({ ok: true, debug: debug ? diagInfo : undefined });
+  } catch (e) {
+    diagInfo.saveError = String(e);
+    return _err('データ保存エラー', debug, diagInfo);
   }
 };
 
 /**
- * 日付を正規化してYYYY/MM/DD形式に変換
- * @param {string|Date} dateStr - 正規化対象の日付（文字列またはDateオブジェクト）
- * @returns {string} YYYY/MM/DD形式の日付文字列
- * @description 様々な形式の日付（YYYY-MM-DD、日本語形式、Dateオブジェクト等）を
- *              統一されたYYYY/MM/DD形式に変換する
+ * 指定年月の勤怠データを取得（範囲限定読込で高速化）。
  */
-function normalizeDate(dateStr) {
-  if (typeof dateStr !== 'string') {
-    if (dateStr instanceof Date) {
-      const y = dateStr.getFullYear();
-      const m = (dateStr.getMonth() + 1).toString().padStart(2, '0');
-      const d = dateStr.getDate().toString().padStart(2, '0');
-      return `${y}/${m}/${d}`;
-    }
-    return String(dateStr);
+Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo) {
+  diagInfo = diagInfo || {};
+  diagInfo.stage = 'getMonthlyData';
+  diagInfo.handlerVersion = 'slim-2026-05-06';  // ← 新版判別マーカー
+
+  // 1. 認証
+  var authErr = _requireValidToken(token, diagInfo);
+  if (authErr) return _err(authErr.err, debug, diagInfo);
+
+  // 2. パラメータ
+  var p = payload || {};
+  if (!p.spreadsheetId) {
+    diagInfo.missingParam = 'spreadsheetId';
+    return _err('スプレッドシートIDが未指定です', debug, diagInfo);
   }
-  
-  // 日付文字列を YYYY/MM/DD 形式に正規化
+  if (!p.userId) {
+    diagInfo.missingParam = 'userId';
+    return _err('ユーザーIDが未指定です', debug, diagInfo);
+  }
+  if (p.year == null || p.month == null) {
+    diagInfo.missingParam = (p.month == null) ? 'month' : 'year';
+    return _err('年月が未指定です', debug, diagInfo);
+  }
+
+  // 3. シート取得
+  var sheet;
+  try {
+    sheet = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName('データ');
+    if (!sheet) {
+      diagInfo.sheetError = 'データシートが見つかりません';
+      return _err('データシートが見つかりません', debug, diagInfo);
+    }
+  } catch (e) {
+    diagInfo.sheetError = String(e);
+    return _err('スプレッドシートアクセスエラー', debug, diagInfo);
+  }
+
+  // 4. 月の行範囲を計算で限定（全件読込を避ける）
+  diagInfo.stage = 'read_data';
+  var lastRow = sheet.getLastRow();
+  var startRow = _findOrCalculateRowByDate(sheet, p.year + '/' + p.month + '/1');
+  var daysInMonth = new Date(p.year, p.month, 0).getDate();
+  var endRow = _findOrCalculateRowByDate(sheet, p.year + '/' + p.month + '/' + daysInMonth);
+  if (startRow < 2) startRow = 2;
+  if (endRow < startRow) endRow = startRow;
+  if (endRow > lastRow) endRow = lastRow;
+  var numRows = Math.max(0, endRow - startRow + 1);
+  if (numRows === 0) {
+    return Utils.createResponse({ ok: true, data: [], debug: debug ? diagInfo : undefined });
+  }
+
+  var values = sheet.getRange(startRow, 1, numRows, 7).getValues();
+
+  // 5. レコード変換 + 月でフィルタ
+  var result = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var dateStr = _toIsoDate(row[0]);
+    if (!dateStr || dateStr.length < 7) continue;
+    var ymParts = dateStr.split('-');
+    if (parseInt(ymParts[0], 10) !== p.year || parseInt(ymParts[1], 10) !== p.month) continue;
+
+    var g = _parseGColumn(row[6]);
+    result.push({
+      date: dateStr,
+      month: _safeIntFromCell(row[1]),
+      startTime: String(row[2] || ''),
+      breakTime: String(row[3] || ''),
+      endTime: String(row[4] || ''),
+      workingTime: String(row[5] || ''),
+      location: g.location,
+      tasks: g.tasks
+    });
+  }
+
+  return Utils.createResponse({ ok: true, data: result, debug: debug ? diagInfo : undefined });
+};
+
+// ════════════════════════════════════════════════════════════════════
+//   内部ヘルパ（共通）
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * トークン検証の単一ポイント。両ハンドラから同じ実装を共有することで
+ * `saveKintai だけ通らない` 類の不整合を物理的に防ぐ。
+ *
+ * @returns {null | {err:string}} 検証成功なら null、失敗なら {err}
+ */
+function _requireValidToken(token, diagInfo) {
+  diagInfo._helperReached = true;  // ← この helper が定義されていれば必ず true になる
+  if (!token) {
+    diagInfo.noToken = true;
+    return { err: 'トークン未指定' };
+  }
+  diagInfo.stage = 'token_verification';
+  try {
+    var tokenInfo = Auth.checkToken(token);
+    diagInfo.tokenValid = tokenInfo.valid;
+    diagInfo.tokenFormat = tokenInfo._format;
+    if (!tokenInfo.valid) {
+      diagInfo.tokenReason = tokenInfo.reason;
+      return { err: 'トークンが無効です' };
+    }
+    return null;
+  } catch (e) {
+    diagInfo.tokenError = String(e);
+    return { err: 'トークン検証エラー' };
+  }
+}
+
+function _err(message, debug, diagInfo) {
+  return Utils.createResponse({
+    ok: false,
+    err: message,
+    debug: debug ? diagInfo : undefined
+  });
+}
+
+// ── 日付ユーティリティ ───────────────────────────────────────────────
+
+function _normalizeDate(dateStr) {
+  if (dateStr instanceof Date) {
+    return dateStr.getFullYear() + '/'
+      + String(dateStr.getMonth() + 1).padStart(2, '0') + '/'
+      + String(dateStr.getDate()).padStart(2, '0');
+  }
+  if (typeof dateStr !== 'string') return String(dateStr);
+
   if (dateStr.includes('-')) {
-    // YYYY-MM-DD形式
-    const [year, month, day] = dateStr.split('-');
-    return `${year}/${month}/${day}`;
-  } else if (dateStr.includes('/')) {
-    // すでにYYYY/MM/DD形式
-    return dateStr;
-  } else if (dateStr.match(/^\d{4}年\d{1,2}月\d{1,2}日/)) {
-    // 日本語形式（2025年5月4日）
-    const match = dateStr.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
-    if (match) {
-      const [_, jpYear, jpMonth, jpDay] = match;
-      return `${jpYear}/${jpMonth.padStart(2, '0')}/${jpDay.padStart(2, '0')}`;
-    }
+    var ymd = dateStr.split('-');
+    return ymd[0] + '/' + ymd[1] + '/' + ymd[2];
   }
-  
-  // その他の形式はそのまま返す
+  if (dateStr.includes('/')) return dateStr;
+  var jp = dateStr.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (jp) {
+    return jp[1] + '/' + jp[2].padStart(2, '0') + '/' + jp[3].padStart(2, '0');
+  }
   return dateStr;
 }
 
+function _toIsoDate(val) {
+  if (val instanceof Date) {
+    return val.getFullYear() + '-'
+      + String(val.getMonth() + 1).padStart(2, '0') + '-'
+      + String(val.getDate()).padStart(2, '0');
+  }
+  if (typeof val === 'string') {
+    var n = _normalizeDate(val);
+    var p = n.split('/');
+    if (p.length === 3) return p[0] + '-' + p[1].padStart(2, '0') + '-' + p[2].padStart(2, '0');
+    return n;
+  }
+  return String(val || '');
+}
+
+function _safeIntFromCell(val) {
+  if (typeof val === 'number') return val;
+  var n = parseInt(val, 10);
+  return isNaN(n) ? 0 : n;
+}
+
+function _formatBreakTime(breakTime) {
+  if (typeof breakTime === 'string' && breakTime.includes(':')) return breakTime;
+  var minutes = parseInt(breakTime, 10);
+  if (isNaN(minutes)) return '0:00';
+  return Math.floor(minutes / 60) + ':' + String(minutes % 60).padStart(2, '0');
+}
+
+// ── G 列（作業内容 JSON） ────────────────────────────────────────────
+
 /**
- * 日付から月の値を抽出（B列用）
- * @param {string|Date} dateStr - 月を抽出する日付
- * @returns {number|string} 月の数値（1-12）またはデフォルト値
- * @description 日付文字列またはDateオブジェクトから月の値を数値として抽出する
+ * 保存時: tasks (新形式) があれば JSON 化、なければ location (旧形式) を 1 件の tasks に変換。
+ * どちらもなければ空文字。
  */
-function extractMonthValue(dateStr) {
-  if (dateStr.includes('/')) {
-    const parts = dateStr.split('/');
-    if (parts.length >= 2) {
-      return parseInt(parts[1], 10); // 月を数値として返す
-    }
-  } else if (dateStr.includes('-')) {
-    const parts = dateStr.split('-');
-    if (parts.length >= 2) {
-      return parseInt(parts[1], 10); // 月を数値として返す
-    }
+function _buildGValue(tasks, location) {
+  if (Array.isArray(tasks) && tasks.length > 0) {
+    return JSON.stringify(tasks);
   }
-  
-  // 直接日付オブジェクトの場合
-  if (dateStr instanceof Date) {
-    return dateStr.getMonth() + 1;
+  if (location && String(location).trim() !== '') {
+    return JSON.stringify([{ job: String(location).trim(), hours: 0 }]);
   }
-  
-  // デフォルト値
   return '';
 }
 
 /**
- * 休憩時間を0:30形式にフォーマット
- * @param {string|number} breakTime - 休憩時間（HH:mm形式または分数）
- * @returns {string} HH:mm形式の休憩時間文字列
- * @description 分数または既存のHH:mm形式の休憩時間を統一されたHH:mm形式に変換する
+ * 読込時: G 列の生値を { tasks, location } に展開（旧形式の単一文字列にも対応）。
  */
-function formatBreakTime(breakTime) {
-  if (typeof breakTime === 'string' && breakTime.includes(':')) {
-    return breakTime; // すでに時:分形式
+function _parseGColumn(rawVal) {
+  var raw = String(rawVal || '').trim();
+  if (raw === '') return { tasks: [], location: '' };
+
+  if (raw.startsWith('[')) {
+    try {
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        var loc = parsed.map(function(t) { return t && t.job; }).filter(Boolean).join(', ');
+        return { tasks: parsed, location: loc };
+      }
+    } catch (_) { /* fall through to legacy */ }
   }
-  
-  // 分数を時:分形式に変換
-  const minutes = parseInt(breakTime, 10);
-  if (isNaN(minutes)) return '0:00';
-  
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${hours}:${mins.toString().padStart(2, '0')}`;
+  // 旧形式: location 文字列だけが書かれているケース
+  return { tasks: [{ job: raw, hours: 0 }], location: raw };
 }
 
-/**
- * 行番号を検索または計算で特定する
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 対象のスプレッドシート
- * @param {string} dateStr - 検索対象の日付（YYYY/MM/DD形式）
- * @returns {number} 行番号（1から始まる）
- * @description 指定された日付に対応する行番号を検索で見つけるか、
- *              見つからない場合は年初からの経過日数で計算して特定する
- */
-function findOrCalculateRowByDate(sheet, dateStr) {
-  // 1. 日付を解析
-  const [yearStr, monthStr, dayStr] = dateStr.split('/');
-  const year = parseInt(yearStr, 10);
-  const month = parseInt(monthStr, 10);
-  const day = parseInt(dayStr, 10);
-  
-  // 2. まずシート内を検索してみる
-  const row = searchRowByDate(sheet, dateStr);
-  if (row > 0) {
-    return row; // 見つかった場合はその行を返す
-  }
-  
-  // 3. 見つからない場合は計算で行番号を算出
-  // 3-1. シートの開始行（ヘッダー）
-  const HEADER_ROWS = 1;
-  
-  // 3-2. 年初からの経過日数を計算
-  const dayOfYear = getDayOfYear(year, month, day);
-  
-  // 3-3. 行番号算出 = ヘッダー行 + 経過日数
-  return HEADER_ROWS + dayOfYear;
+// ── 行検索（A 列の日付に対する TextFinder + フォールバック） ─────────
+
+function _findOrCalculateRowByDate(sheet, dateStr) {
+  var found = _searchRowByDate(sheet, dateStr);
+  if (found > 0) return found;
+  // 見つからなければ「ヘッダ + 年初からの経過日数」で推定
+  var ymd = dateStr.split('/');
+  return 1 + _getDayOfYear(parseInt(ymd[0], 10), parseInt(ymd[1], 10), parseInt(ymd[2], 10));
 }
 
-/**
- * 年初からの経過日数を計算（うるう年対応）
- * @param {number} year - 年
- * @param {number} month - 月（1-12）
- * @param {number} day - 日（1-31）
- * @returns {number} 年初からの経過日数
- * @description うるう年を考慮して、指定された日付の年初からの経過日数を計算する
- */
-function getDayOfYear(year, month, day) {
-  // 各月の日数（通常年）
-  const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  
-  // うるう年チェック
-  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-  if (isLeapYear) {
-    daysInMonth[2] = 29; // うるう年は2月が29日
-  }
-  
-  // 年初からの経過日数を計算
-  let dayOfYear = day;
-  for (let i = 1; i < month; i++) {
-    dayOfYear += daysInMonth[i];
-  }
-  
-  return dayOfYear;
-}
-
-/**
- * シート内で日付に一致する行を検索（A列限定、TextFinder補助＋フォールバック）
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 検索対象のスプレッドシート
- * @param {string} targetDateStr - 検索する日付（YYYY/MM/DD形式）
- * @returns {number} 見つかった行番号（1から始まる）、見つからない場合は-1
- * @description A列の日本語表示（YYYY年M月D日…）をTextFinderで探し、見つからなければ従来の正規化比較で検索する
- */
-function searchRowByDate(sheet, targetDateStr) {
-  const lastRow = sheet.getLastRow();
+function _searchRowByDate(sheet, targetDateStr) {
+  var lastRow = sheet.getLastRow();
   if (lastRow <= 1) return -1;
-  
-  // まず A列の表示文字列に対してTextFinderで日本語日付部分を検索
-  // targetDateStr は 'YYYY/MM/DD' なので、日本語部分 'YYYY年M月D日' に変換
-  let jpDatePrefix = '';
-  try {
-    const [y, m, d] = targetDateStr.split('/');
-    jpDatePrefix = `${parseInt(y,10)}年${parseInt(m,10)}月${parseInt(d,10)}日`;
-  } catch (_) {
-    jpDatePrefix = '';
+
+  // A 列は表示形式 "YYYY年M月D日(曜)" が多いので、まず TextFinder で日本語前置一致
+  var ymd = targetDateStr.split('/');
+  if (ymd.length === 3) {
+    var jpPrefix = parseInt(ymd[0], 10) + '年' + parseInt(ymd[1], 10) + '月' + parseInt(ymd[2], 10) + '日';
+    var aRange = sheet.getRange(2, 1, lastRow - 1, 1);
+    var hit = aRange.createTextFinder(jpPrefix).matchCase(false).findNext();
+    if (hit) return hit.getRow();
   }
-  if (jpDatePrefix) {
-    const aRange = sheet.getRange(2, 1, lastRow - 1, 1); // A列のみ
-    const finder = aRange.createTextFinder(jpDatePrefix).matchCase(false);
-    const found = finder.findNext();
-    if (found) {
-      return found.getRow();
-    }
+
+  // フォールバック: A 列を読んで正規化比較
+  var aValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < aValues.length; i++) {
+    var v = aValues[i][0];
+    var s = (v instanceof Date)
+      ? (v.getFullYear() + '/' + String(v.getMonth() + 1).padStart(2, '0') + '/' + String(v.getDate()).padStart(2, '0'))
+      : (typeof v === 'string' ? _normalizeDate(v) : '');
+    if (s === targetDateStr) return i + 2;
   }
-  
-  // フォールバック: A列のみ読み込んで正規化比較（従来互換）
-  const aValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  for (let i = 0; i < aValues.length; i++) {
-    const rowDate = aValues[i][0];
-    let rowDateStr = '';
-    if (rowDate instanceof Date) {
-      const y = rowDate.getFullYear();
-      const m = (rowDate.getMonth() + 1).toString().padStart(2, '0');
-      const d = rowDate.getDate().toString().padStart(2, '0');
-      rowDateStr = `${y}/${m}/${d}`;
-    } else if (typeof rowDate === 'string') {
-      rowDateStr = normalizeDate(rowDate);
-    }
-    if (rowDateStr === targetDateStr) {
-      return i + 2; // 2行目開始なので+2
-    }
-  }
-  
-  // 見つからない場合
   return -1;
 }
 
-/**
- * 月間勤怠データ取得
- * @param {MonthlyDataPayload} payload - 月間データ取得のペイロード
- * @param {string} token - 認証トークン
- * @param {boolean} debug - デバッグモードフラグ
- * @param {DiagnosticInfo} [diagInfo={}] - 診断情報オブジェクト
- * @returns {ApiResponse} 月間勤怠データを含むAPI応答オブジェクト
- * @description 指定された年月の勤怠データをGoogle Spreadsheetから取得し、
- *              フィルタリングして返す。様々なデータ形式に対応。
- */
-Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
-  diagInfo.stage = 'getMonthlyData';
-  if (debug) Logger.log("月間勤怠データ取得開始: " + JSON.stringify(payload));
-  
-  try {
-    // トークン検証
-    if (!token) {
-      diagInfo.noToken = true;
-      return Utils.createResponse({
-        ok: false,
-        err: 'トークン未指定',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // トークンの検証
-    diagInfo.stage = 'token_verification';
-    /** @type {TokenInfo} */
-    let tokenInfo;
-    try {
-      tokenInfo = Auth.checkToken(token);
-      diagInfo.tokenValid = tokenInfo.valid;
-      
-      if (!tokenInfo.valid) {
-        return Utils.createResponse({
-          ok: false,
-          err: 'トークンが無効です',
-          debug: debug ? diagInfo : undefined
-        });
-      }
-      
-      if (debug) Logger.log("トークン検証成功: " + JSON.stringify(tokenInfo));
-    } catch (tokenErr) {
-      diagInfo.tokenError = String(tokenErr);
-      if (debug) Logger.log("トークン検証エラー: " + tokenErr);
-      return Utils.createResponse({
-        ok: false,
-        err: 'トークン検証エラー',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // 必須パラメータチェック
-    diagInfo.stage = 'parameter_check';
-    /** @type {string} */
-    const { spreadsheetId, userId, year, month } = payload;
-    
-    if (!spreadsheetId) {
-      diagInfo.missingParam = 'spreadsheetId';
-      if (debug) Logger.log("スプレッドシートID未指定");
-      return Utils.createResponse({
-        ok: false,
-        err: 'スプレッドシートIDが未指定です',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    if (!userId) {
-      diagInfo.missingParam = 'userId';
-      if (debug) Logger.log("ユーザーID未指定");
-      return Utils.createResponse({
-        ok: false,
-        err: 'ユーザーIDが未指定です',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    if (year == null || month == null) {
-      diagInfo.missingParam = !month ? 'month' : 'year';
-      return Utils.createResponse({
-        ok: false,
-        err: '年月が未指定です',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // スプレッドシートアクセス
-    diagInfo.stage = 'spreadsheet_access';
-    /** @type {GoogleAppsScript.Spreadsheet.Spreadsheet} */
-    let ss;
-    /** @type {GoogleAppsScript.Spreadsheet.Sheet} */
-    let sheet;
-    try {
-      ss = SpreadsheetApp.openById(spreadsheetId);
-      sheet = ss.getSheetByName('データ');
-      
-      if (!sheet) {
-        diagInfo.sheetError = 'データシートが見つかりません';
-        return Utils.createResponse({
-          ok: false,
-          err: 'データシートが見つかりません',
-          debug: debug ? diagInfo : undefined
-        });
-      }
-    } catch (sheetErr) {
-      diagInfo.sheetError = String(sheetErr);
-      if (debug) Logger.log("シートアクセスエラー: " + sheetErr);
-      return Utils.createResponse({
-        ok: false,
-        err: 'スプレッドシートアクセスエラー',
-        debug: debug ? diagInfo : undefined
-      });
-    }
-    
-    // データの抽出と変換（範囲限定）
-    diagInfo.stage = 'read_data';
-    /** @type {number} */
-    const lastRow = sheet.getLastRow();
-    /** @type {number} */
-    const lastCol = 7; // A〜G列を常に読む（G列が全行空でも安全に読める）
-    /** @type {string} */
-    const startDateStr = `${year}/${month}/1`;
-    /** @type {number} */
-    let startRow = findOrCalculateRowByDate(sheet, startDateStr);
-    /** @type {number} */
-    const daysInMonth = new Date(year, month, 0).getDate();
-    /** @type {string} */
-    const endDateStr = `${year}/${month}/${daysInMonth}`;
-    /** @type {number} */
-    let endRow = findOrCalculateRowByDate(sheet, endDateStr);
-    if (startRow < 2) startRow = 2; // ヘッダーを除外
-    if (endRow < startRow) endRow = startRow; // 異常時のフォールバック
-    if (endRow > lastRow) endRow = lastRow; // 最終行を超えない
-    /** @type {number} */
-    const numRows = Math.max(0, endRow - startRow + 1);
-    if (numRows === 0) {
-      if (debug) Logger.log('対象月の行が見つかりません');
-      return Utils.createResponse({ ok: true, data: [], debug: debug ? diagInfo : undefined });
-    }
-    /** @type {GoogleAppsScript.Spreadsheet.Range} */
-    const range = sheet.getRange(startRow, 1, numRows, lastCol);
-    /** @type {any[][]} */
-    const values = range.getValues();
-    if (debug) Logger.log(`限定範囲読み込み: startRow=${startRow}, endRow=${endRow}, rows=${values.length}`);
-    
-    /** @type {KintaiRecord[]} */
-    const result = [];
-    for (let i = 0; i < values.length; i++) {
-      const row = values[i];
-      const dateVal = row[0];
-      const monthVal = row[1];
-      const startTimeVal = row[2];
-      const breakTimeVal = row[3];
-      const endTimeVal = row[4];
-      const workingTimeVal = row[5];
-      const locationVal = row[6];
-      
-      // 日付を文字列に変換
-      let dateStr = '';
-      if (dateVal instanceof Date) {
-        const y = dateVal.getFullYear();
-        const m = (dateVal.getMonth() + 1).toString().padStart(2, '0');
-        const d = dateVal.getDate().toString().padStart(2, '0');
-        dateStr = `${y}-${m}-${d}`;
-      } else if (typeof dateVal === 'string') {
-        const normalized = normalizeDate(dateVal);
-        const parts = normalized.split('/');
-        if (parts.length === 3) {
-          dateStr = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
-        } else {
-          dateStr = normalized;
-        }
-      } else {
-        dateStr = String(dateVal);
-      }
-      
-      // 月の値を数値に変換
-      let monthNum = 0;
-      if (typeof monthVal === 'number') {
-        monthNum = monthVal;
-      } else if (typeof monthVal === 'string') {
-        const m = parseInt(monthVal, 10);
-        monthNum = isNaN(m) ? 0 : m;
-      }
-      
-      // G列のJSONパース（後方互換: 旧形式の文字列にも対応）
-      /** @type {Array<{job: string, hours: number}>} */
-      let parsedTasks = [];
-      /** @type {string} */
-      let locationCompat = '';
-      const gRaw = String(locationVal || '').trim();
-
-      if (gRaw.startsWith('[')) {
-        // JSON形式（新形式）
-        try {
-          parsedTasks = JSON.parse(gRaw);
-          // パース成功: tasksからlocationサマリを生成
-          locationCompat = parsedTasks.map(function(t) { return t.job; }).join(', ');
-        } catch (jsonErr) {
-          // JSONパース失敗: 旧形式として扱う
-          locationCompat = gRaw;
-          parsedTasks = [{ job: gRaw, hours: 0 }];
-        }
-      } else if (gRaw !== '') {
-        // 旧形式（単一文字列）
-        locationCompat = gRaw;
-        parsedTasks = [{ job: gRaw, hours: 0 }];
-      }
-      // gRaw === '' の場合: parsedTasks = [], locationCompat = ''
-
-      // レコード作成
-      result.push({
-        date: dateStr,
-        month: monthNum,
-        startTime: String(startTimeVal || ''),
-        breakTime: String(breakTimeVal || ''),
-        endTime: String(endTimeVal || ''),
-        workingTime: String(workingTimeVal || ''),
-        location: locationCompat,
-        tasks: parsedTasks
-      });
-    }
-    
-    // 指定年月でフィルタ
-    const filtered = result.filter(r => {
-      if (!r.date || r.date.length < 7) return false;
-      const [y, m] = r.date.split('-');
-      return parseInt(y,10) === year && parseInt(m,10) === month;
-    });
-    
-    return Utils.createResponse({
-      ok: true,
-      data: filtered,
-      debug: debug ? diagInfo : undefined
-    });
-  } catch (e) {
-    diagInfo.error = String(e);
-    return Utils.createResponse({
-      ok: false,
-      err: '月間勤怠データ取得エラー',
-      debug: debug ? diagInfo : undefined
-    });
-  }
-};
-
-/**
- * 勤怠履歴の取得（レガシー）
- * @param {Object} payload - リクエストペイロード
- * @param {string} token - 認証トークン
- * @param {boolean} debug - デバッグモードフラグ
- * @param {DiagnosticInfo} [diagInfo={}] - 診断情報オブジェクト
- * @returns {ApiResponse} 勤怠履歴データを含むAPI応答オブジェクト
- * @description レガシー機能として勤怠履歴を取得する（現在は空配列を返す）
- */
-Kintai.handleGetHistory = function(payload, token, debug, diagInfo = {}) {
-  // トークン検証、データ取得など、既存のコードがあればここに実装
-  // このサンプルは最小限のレスポンスを返す
-  return Utils.createResponse({
-    ok: true,
-    data: [],
-    debug: debug ? diagInfo : undefined
-  });
-};
-
-/**
- * kintai.gs
- * 2025-05-04T12:00+09:00
- * 変更概要: 更新 - 勤怠管理関連の機能を提供するモジュール（日付型対応、勤務場所対応、行位置特定アルゴリズム追加）
- * JSDoc型定義追加 - 詳細な型情報とドキュメントを追加
- */
-
-/**
- * @typedef {Object} KintaiPayload
- * @property {string} date - 勤怠日付（YYYY-MM-DD、YYYY/MM/DD、または日本語形式）
- * @property {string} startTime - 出勤時間（HH:mm形式）
- * @property {string} breakTime - 休憩時間（HH:mm形式）
- * @property {string} endTime - 退勤時間（HH:mm形式）
- * @property {string} spreadsheetId - Google SpreadsheetのID
- * @property {string} userId - ユーザーID
- * @property {string} [location] - 勤務場所（後方互換用、オプション）
- * @property {Array<{job: string, hours: number}>} [tasks] - 作業内容配列（オプション）
- */
-
-/**
- * @typedef {Object} MonthlyDataPayload
- * @property {string} spreadsheetId - Google SpreadsheetのID
- * @property {string} userId - ユーザーID
- * @property {number} year - 取得対象年
- * @property {number} month - 取得対象月
- */
-
-/**
- * @typedef {Object} DiagnosticInfo
- * @property {string} stage - 処理段階
- * @property {boolean} [noToken] - トークン未指定フラグ
- * @property {boolean} [tokenValid] - トークン有効性
- * @property {string} [tokenError] - トークンエラー詳細
- * @property {boolean} [missingParams] - 必須パラメータ不足フラグ
- * @property {string} [missingParam] - 不足パラメータ名
- * @property {string} [sheetError] - シートエラー詳細
- * @property {string} [workingTime] - 計算された勤務時間
- * @property {string} [normalizedDate] - 正規化された日付
- * @property {number} [rowIndex] - 更新行番号
- * @property {string} [monthValue] - 月の値
- * @property {boolean} [updated] - 更新完了フラグ
- * @property {number} [rowUpdated] - 更新された行番号
- * @property {string} [saveError] - 保存エラー詳細
- * @property {string} [calcError] - 計算エラー詳細
- * @property {string} [rowError] - 行特定エラー詳細
- * @property {string} [error] - 一般エラー詳細
- */
-
-/**
- * @typedef {Object} TokenInfo
- * @property {boolean} valid - トークンの有効性
- * @property {string} [userId] - ユーザーID
- * @property {number} [exp] - 有効期限（Unix timestamp）
- */
-
-/**
- * @typedef {Object} ApiResponse
- * @property {boolean} ok - 処理成功フラグ
- * @property {string} [err] - エラーメッセージ
- * @property {*} [data] - レスポンスデータ
- * @property {DiagnosticInfo} [debug] - デバッグ情報
- */
-
-/**
- * @typedef {Object} KintaiRecord
- * @property {string} date - 日付
- * @property {number} month - 月
- * @property {string} startTime - 出勤時間
- * @property {string} breakTime - 休憩時間
- * @property {string} endTime - 退勤時間
- * @property {string} workingTime - 勤務時間
- * @property {string} location - 勤務場所（互換用サマリ文字列）
- * @property {Array<{job: string, hours: number}>} tasks - 作業内容配列
- */
-
-/**
- * F列の計算式状況を確認する関数
- * @returns {Object} F列の計算式状況レポート
- * @description スプレッドシートのF列（勤務時間列）の計算式の状況を分析し、
- *              計算式の数、値の数、空セルの数などの統計情報を返す
- */
-Kintai.checkFColumnFormulas = function() {
-  try {
-    /** @type {GoogleAppsScript.Spreadsheet.Sheet} */
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    /** @type {number} */
-    const lastRow = sheet.getLastRow();
-    
-    if (lastRow <= 1) {
-      return {
-        status: 'no_data',
-        message: 'データが存在しません'
-      };
-    }
-    
-    // F列の範囲を取得（2行目から最終行まで）
-    /** @type {GoogleAppsScript.Spreadsheet.Range} */
-    const fColumnRange = sheet.getRange(2, 6, lastRow - 1, 1);
-    /** @type {string[][]} */
-    const formulas = fColumnRange.getFormulas();
-    /** @type {any[][]} */
-    const values = fColumnRange.getValues();
-    
-    /** @type {number} */
-    let formulaCount = 0;
-    /** @type {number} */
-    let valueCount = 0;
-    /** @type {number} */
-    let emptyCount = 0;
-    /** @type {Array<{row: number, formula: string, value: any}>} */
-    const sampleFormulas = [];
-    /** @type {Array<{row: number, value: any}>} */
-    const sampleValues = [];
-    
-    formulas.forEach((row, index) => {
-      /** @type {string} */
-      const formula = row[0];
-      /** @type {any} */
-      const value = values[index][0];
-      
-      if (formula && formula.trim() !== '') {
-        formulaCount++;
-        if (sampleFormulas.length < 3) {
-          sampleFormulas.push({
-            row: index + 2,
-            formula: formula,
-            value: value
-          });
-        }
-      } else if (value && value.toString().trim() !== '') {
-        valueCount++;
-        if (sampleValues.length < 3) {
-          sampleValues.push({
-            row: index + 2,
-            value: value
-          });
-        }
-      } else {
-        emptyCount++;
-      }
-    });
-    
-    return {
-      status: 'success',
-      totalRows: lastRow - 1,
-      formulaCount: formulaCount,
-      valueCount: valueCount,
-      emptyCount: emptyCount,
-      sampleFormulas: sampleFormulas,
-      sampleValues: sampleValues,
-      message: `F列の状況: 計算式${formulaCount}個、値${valueCount}個、空白${emptyCount}個`
-    };
-    
-  } catch (error) {
-    return {
-      status: 'error',
-      message: 'F列の確認中にエラーが発生しました: ' + error.toString()
-    };
-  }
-};
+function _getDayOfYear(year, month, day) {
+  var daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if ((year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)) daysInMonth[2] = 29;
+  var n = day;
+  for (var i = 1; i < month; i++) n += daysInMonth[i];
+  return n;
+}
