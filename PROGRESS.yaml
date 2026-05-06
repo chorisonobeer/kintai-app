@@ -1,0 +1,26 @@
+project: kintai-app
+updated: "2026-03-26"
+
+current:
+  branch: feat/multi-task-support
+  goal: 複数作業対応（1日に複数の作業内容・時間を入力可能にする）
+  status: in_progress
+  done: "調査完了、実装計画策定済み（8+4回チェック）、ブランチ作成済み"
+  pending:
+    - "Step 1: src/types.ts に TaskEntry型追加、既存型にtasks追加"
+    - "Step 2: GAS/kintai.gs 7箇所変更（G1-G7）→ 手動デプロイ"
+    - "Step 3: src/utils/apiService.ts 4箇所にtasks追加"
+    - "Step 4: src/components/KintaiForm.tsx 15箇所変更（最大リスク）"
+    - "Step 5: src/components/MonthlyView.tsx 2箇所変更"
+    - "Step 5.5: src/contexts/KintaiContext.tsx 1箇所追加"
+    - "Step 6: src/styles.css 約60行CSS追加"
+    - "Step 7: テスト（9項目）"
+  context: >
+    実装ステップ: docs/implementation-steps.md
+    GAS変更仕様書: docs/gas-change-spec.md
+
+next:
+  - 給与計算機能（作業×時給×時間の自動集計）
+  - 作業内容マスタのGAS経由管理（CSV直取得からの移行）
+
+history: []

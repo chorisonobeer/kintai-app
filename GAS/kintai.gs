@@ -18,7 +18,8 @@
  * @property {string} endTime - 退勤時間（HH:mm形式）
  * @property {string} spreadsheetId - Google SpreadsheetのID
  * @property {string} userId - ユーザーID
- * @property {string} [location] - 勤務場所（オプション）
+ * @property {string} [location] - 勤務場所（後方互換用、オプション）
+ * @property {Array<{job: string, hours: number}>} [tasks] - 作業内容配列（オプション）
  */
 
 /**
@@ -73,7 +74,8 @@
  * @property {string} breakTime - 休憩時間
  * @property {string} endTime - 退勤時間
  * @property {string} workingTime - 勤務時間
- * @property {string} location - 勤務場所
+ * @property {string} location - 勤務場所（互換用サマリ文字列）
+ * @property {Array<{job: string, hours: number}>} tasks - 作業内容配列
  */
 
 // Kintaiオブジェクトの定義
@@ -129,12 +131,13 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
     // 必須パラメータチェック
     diagInfo.stage = 'parameter_check';
     /** @type {string} */
-    const { date, startTime, breakTime, endTime, spreadsheetId, userId, location } = payload;
-    
-    // 削除意図の判定（時間が空、かつ勤務地も未指定なら削除）
+    const { date, startTime, breakTime, endTime, spreadsheetId, userId, location, tasks } = payload;
+
+    // 削除意図の判定（時間が空、かつ勤務地も未指定、かつtasksも空なら削除）
     // breakTime は空文字/"00:00" など多様な表現がありうるため削除判定から除外
     /** @type {boolean} */
-    const isDelete = (!startTime && !endTime && (!location || String(location).trim() === ''));
+    const hasTasks = Array.isArray(tasks) && tasks.length > 0;
+    const isDelete = (!startTime && !endTime && (!location || String(location).trim() === '') && !hasTasks);
     diagInfo.isDelete = isDelete;
     
     // 削除時は date/spreadsheetId のみ必須。通常保存では startTime/endTime と userId 必須
@@ -250,23 +253,52 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo = {}) {
       diagInfo.monthValue = monthValue;
       
       // データを準備（スプレッドシートの列に合わせる）
-      // C列: 出勤時間、D列: 休憩時間、E列: 退勤時間、G列: 勤務場所のみ書き込み
-      // A列（日付）、B列（月）、F列（勤務時間）は書き込み禁止
-      
-      // スプレッドシートに勤怠データを保存
-      // C、D、E列のみ書き込み
-      const cVal = isDelete ? '' : startTime;
-      const dVal = isDelete ? '' : formatBreakTime(breakTime);
-      const eVal = isDelete ? '' : endTime;
-      sheet.getRange(rowIndex, 3, 1, 3).setValues([[cVal, dVal, eVal]]); // C〜E列を一括書き込み
-      
-      // G列（勤務場所）
-      if (location) {
-        sheet.getRange(rowIndex, 7, 1, 1).setValue(location);
-      } else if (isDelete) {
-        // 削除時はG列も必ず空にする
-        sheet.getRange(rowIndex, 7, 1, 1).setValue('');
+      // C列: 出勤時間、D列: 休憩時間、E列: 退勤時間
+      // F列: 勤務時間（数式で再設定）
+      // G列: 作業内容（JSON形式）
+      // A列（日付）、B列（月）は書き込み禁止
+
+      // G列に書き込むJSON値を生成
+      /** @type {string} */
+      let gValue = '';
+      if (!isDelete) {
+        if (hasTasks) {
+          // 新形式: tasks配列をJSON化
+          gValue = JSON.stringify(tasks);
+        } else if (location && String(location).trim() !== '') {
+          // 旧形式互換: 単一locationを1件のtasks配列に変換
+          gValue = JSON.stringify([{ job: String(location).trim(), hours: 0 }]);
+        }
+        // どちらも該当しない場合: gValue = '' (空文字のまま)
       }
+
+      if (isDelete) {
+        // 削除時: C~E列とG列を空にする。F列の既存数式は温存（触らない）
+        sheet.getRange(rowIndex, 3, 1, 3).setValues([['', '', '']]);
+        sheet.getRange(rowIndex, 7, 1, 1).setValue('');
+      } else {
+        // (1) C~E列: 出勤・休憩・退勤を一括書き込み
+        sheet.getRange(rowIndex, 3, 1, 3).setValues([
+          [startTime, formatBreakTime(breakTime), endTime]
+        ]);
+
+        // (2) F列: 勤務時間の数式を設定
+        //     setFormula()を使用（setValues()ではリテラル文字列になるため）
+        //     失敗してもC~E+Gは保存済みなので、エラーにせず診断情報に記録のみ
+        try {
+          const fFormula = '=IF(E' + rowIndex + '<C' + rowIndex
+            + ',(E' + rowIndex + '+1)-C' + rowIndex + '-D' + rowIndex
+            + ',E' + rowIndex + '-C' + rowIndex + '-D' + rowIndex + ')';
+          sheet.getRange(rowIndex, 6, 1, 1).setFormula(fFormula);
+        } catch (formulaErr) {
+          diagInfo.formulaError = String(formulaErr);
+        }
+
+        // (3) G列: 作業内容JSONを書き込み
+        sheet.getRange(rowIndex, 7, 1, 1).setValue(gValue);
+      }
+
+      diagInfo.gValue = gValue;
       diagInfo.updated = true;
       diagInfo.rowUpdated = rowIndex;
       
@@ -608,7 +640,7 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
     /** @type {number} */
     const lastRow = sheet.getLastRow();
     /** @type {number} */
-    const lastCol = Math.min(sheet.getLastColumn(), 7); // A〜G列までを対象
+    const lastCol = 7; // A〜G列を常に読む（G列が全行空でも安全に読める）
     /** @type {string} */
     const startDateStr = `${year}/${month}/1`;
     /** @type {number} */
@@ -674,6 +706,31 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
         monthNum = isNaN(m) ? 0 : m;
       }
       
+      // G列のJSONパース（後方互換: 旧形式の文字列にも対応）
+      /** @type {Array<{job: string, hours: number}>} */
+      let parsedTasks = [];
+      /** @type {string} */
+      let locationCompat = '';
+      const gRaw = String(locationVal || '').trim();
+
+      if (gRaw.startsWith('[')) {
+        // JSON形式（新形式）
+        try {
+          parsedTasks = JSON.parse(gRaw);
+          // パース成功: tasksからlocationサマリを生成
+          locationCompat = parsedTasks.map(function(t) { return t.job; }).join(', ');
+        } catch (jsonErr) {
+          // JSONパース失敗: 旧形式として扱う
+          locationCompat = gRaw;
+          parsedTasks = [{ job: gRaw, hours: 0 }];
+        }
+      } else if (gRaw !== '') {
+        // 旧形式（単一文字列）
+        locationCompat = gRaw;
+        parsedTasks = [{ job: gRaw, hours: 0 }];
+      }
+      // gRaw === '' の場合: parsedTasks = [], locationCompat = ''
+
       // レコード作成
       result.push({
         date: dateStr,
@@ -682,7 +739,8 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo = {}) {
         breakTime: String(breakTimeVal || ''),
         endTime: String(endTimeVal || ''),
         workingTime: String(workingTimeVal || ''),
-        location: String(locationVal || '')
+        location: locationCompat,
+        tasks: parsedTasks
       });
     }
     
@@ -742,7 +800,8 @@ Kintai.handleGetHistory = function(payload, token, debug, diagInfo = {}) {
  * @property {string} endTime - 退勤時間（HH:mm形式）
  * @property {string} spreadsheetId - Google SpreadsheetのID
  * @property {string} userId - ユーザーID
- * @property {string} [location] - 勤務場所（オプション）
+ * @property {string} [location] - 勤務場所（後方互換用、オプション）
+ * @property {Array<{job: string, hours: number}>} [tasks] - 作業内容配列（オプション）
  */
 
 /**
@@ -797,7 +856,8 @@ Kintai.handleGetHistory = function(payload, token, debug, diagInfo = {}) {
  * @property {string} breakTime - 休憩時間
  * @property {string} endTime - 退勤時間
  * @property {string} workingTime - 勤務時間
- * @property {string} location - 勤務場所
+ * @property {string} location - 勤務場所（互換用サマリ文字列）
+ * @property {Array<{job: string, hours: number}>} tasks - 作業内容配列
  */
 
 /**

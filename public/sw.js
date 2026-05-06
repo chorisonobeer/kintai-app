@@ -1,27 +1,34 @@
-const CACHE_NAME = 'kintai-app-v2';
+// CACHE_NAME はビルド時に scripts/set-build-time.js で自動バンプされる
+const CACHE_NAME = 'kintai-app-motx6mu1';
 // バージョン自動チェック: ドキュメント取得毎に実施
 
+// Google Fonts は install ブロッキングから除外（FOUT許容、runtime cache に任せる）
+// fonts.googleapis.com の install失敗で shell全体のキャッシュが飛ぶ事故を防ぐ
 const urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
-  '/version.json',
-  'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap'
+  '/version.json'
 ];
 
-// インストール時のキャッシュ
+// インストール時のキャッシュ（個別 put + allSettled で1つの失敗が全体に波及しない）
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-      .catch((err) => {
-        console.warn('cache.addAll failed on install:', err);
-      })
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const results = await Promise.allSettled(
+        urlsToCache.map((url) =>
+          fetch(url, { cache: 'reload' })
+            .then((r) => (r && r.ok ? cache.put(url, r) : null))
+            .catch(() => null)
+        )
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      if (failed > 0) {
+        console.warn('[SW] install: some urls failed:', failed);
+      }
+    })
   );
   // 新SWをすぐに有効化
   self.skipWaiting();
@@ -127,16 +134,18 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// アクティベート時の古いキャッシュ削除 + クライアント即制御
+// アクティベート時: kintai-app- プレフィックスのうち現行でないものだけ削除
+// （他オリジンのSW等で作成されたキャッシュとの衝突を避けるためプレフィックス限定）
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheName.startsWith('kintai-app-') && cacheName !== CACHE_NAME) {
             console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
+          return null;
         })
       );
     }).then(() => self.clients.claim())
@@ -255,24 +264,42 @@ self.addEventListener('message', (event) => {
       break;
 
     case 'APPLY_UPDATE':
-      // 新バージョン適用（キャッシュ更新のみ、リロードはApp側で制御）
+      // 新バージョン適用: キャッシュは温存し、HTMLシェルのみ上書き
+      // 古い runtime cache (ハッシュ付き JS/CSS) はそのまま残すが、新HTMLが新ハッシュを参照
+      // するため、新ハッシュのみ次回 fetch で runtime cache に追加される。
+      // 古いハッシュアセットは Step 2 の CACHE_NAME 自動バンプで activate 時に掃除される。
       (async () => {
         try {
           const now = Date.now();
           const response = await fetch('/version.json?t=' + now, { cache: 'no-cache' });
+          if (!response.ok) {
+            throw new Error('version.json fetch failed: ' + response.status);
+          }
           const versionData = await response.json();
 
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map(name => caches.delete(name)));
-
           const cache = await caches.open(CACHE_NAME);
+
+          // version.json のみ上書き
           await cache.put('/version.json', new Response(JSON.stringify(versionData), {
             headers: { 'Content-Type': 'application/json' }
           }));
 
+          // HTMLシェルのみ最新化（ハッシュなしURL、cache: 'no-store' でネットワーク優先）
+          try {
+            const htmlResp = await fetch('/index.html', { cache: 'no-store' });
+            if (htmlResp && htmlResp.ok) {
+              await cache.put('/index.html', htmlResp.clone());
+              await cache.put('/', htmlResp.clone());
+            }
+          } catch (htmlErr) {
+            console.warn('[SW] APPLY_UPDATE: html refresh failed:', htmlErr);
+            // HTML取得失敗しても version.json 更新は成功しているので継続
+          }
+
           const clients = await self.clients.matchAll();
           clients.forEach(client => client.postMessage({ type: 'UPDATE_APPLIED', version: versionData }));
         } catch (e) {
+          console.error('[SW] APPLY_UPDATE failed:', e);
           const clients = await self.clients.matchAll();
           clients.forEach(client => client.postMessage({ type: 'UPDATE_FAILED' }));
         }

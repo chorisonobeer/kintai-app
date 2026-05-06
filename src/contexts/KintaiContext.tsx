@@ -72,13 +72,16 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
         setIsDataLoading(true);
         setLastFetchKey(fetchKey);
         // データ取得開始
+        performance.mark(`kintai:fetch-start-${year}-${month}`);
 
         const data = await getMonthlyData(year, month, forceRefresh);
+        performance.mark(`kintai:fetch-end-${year}-${month}`);
         setMonthlyData(data);
         // データ取得完了
 
         // 新しい入力判定ロジック用のキャッシュを初期化（取得したデータを直接渡す）
-        await initializeEntryStatusCache(data);
+        // fire-and-forget で UI レンダリングをブロックしない（batch1 の軽量化）
+        void initializeEntryStatusCache(data);
       } catch (error) {
         // データ取得エラー
         setMonthlyData([]);
@@ -105,6 +108,7 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
           breakTime: record.breakTime, // 元の値をそのまま渡す（空文字列やnullも保持）
           endTime: record.endTime,
           location: record.location || "",
+          tasks: record.tasks || [],
           workingTime: record.workingTime,
         }));
 
@@ -128,6 +132,44 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
     }
 
     fetchMonthlyData(currentYear, currentMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentYear, currentMonth]);
+
+  // Phase E-1: SWR revalidate 完了イベントを購読
+  // getMonthlyData の裏タスクが成功すると kintai:data-updated が発火される
+  useEffect(() => {
+    const onUpdated = (e: Event) => {
+      const ce = e as CustomEvent<{
+        year: number;
+        month: number;
+        data: KintaiRecord[];
+      }>;
+      if (!ce.detail) return;
+      // 現在表示中の月のデータだけ UI に反映
+      if (
+        ce.detail.year === currentYear &&
+        ce.detail.month === currentMonth
+      ) {
+        setMonthlyData(ce.detail.data);
+        void initializeEntryStatusCache(ce.detail.data);
+      }
+    };
+    const onStale = (e: Event) => {
+      // revalidate 失敗: 表示中のデータは古い可能性
+      // 現状はコンソール警告のみ（将来的に StaleDataBanner 等で UI 表示）
+      const ce = e as CustomEvent<{ year: number; month: number }>;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[kintai] 表示中のデータは最新でない可能性があります (${ce.detail?.year}-${ce.detail?.month})`,
+      );
+    };
+    window.addEventListener("kintai:data-updated", onUpdated);
+    window.addEventListener("kintai:data-stale", onStale);
+    return () => {
+      window.removeEventListener("kintai:data-updated", onUpdated);
+      window.removeEventListener("kintai:data-stale", onStale);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, currentMonth]);
 
   // 現在の年月でデータをリフレッシュ

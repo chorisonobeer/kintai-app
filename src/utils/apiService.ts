@@ -75,11 +75,30 @@ export interface VersionHistoryItem {
 // リクエスト重複防止のためのキャッシュ
 const pendingRequests = new Map<string, Promise<ApiOk<any>>>();
 
+/**
+ * タイムアウト・リトライ設定（一元管理）
+ * - Netlify Free プラン上限 10s、転送余裕込みで 10.5s
+ * - Netlify Function 側で 7.5s で abort するので、実質 10.5s まで待つのは abnormal 検出用
+ * - リトライは 1回のみ（実測でリトライ未発動、念のため残す）
+ */
+const TIMEOUT_CONFIG: {
+  CLIENT_TIMEOUT_MS: number;
+  CLIENT_MAX_RETRIES: number;
+  CLIENT_RETRY_BACKOFF_MS: number;
+} = {
+  /** クライアントの fetch タイムアウト */
+  CLIENT_TIMEOUT_MS: 10_500,
+  /** リトライ最大回数（本リクエスト + リトライ1回 = 最大2回試行） */
+  CLIENT_MAX_RETRIES: 1,
+  /** リトライ待機（固定、指数バックオフ廃止） */
+  CLIENT_RETRY_BACKOFF_MS: 1_500,
+};
+
 // タイムアウト付きfetch関数
 function fetchWithTimeout(
   url: string,
   options: RequestInit,
-  timeout = 10000,
+  timeout = TIMEOUT_CONFIG.CLIENT_TIMEOUT_MS,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const controller = new AbortController();
@@ -95,29 +114,26 @@ function fetchWithTimeout(
   });
 }
 
-// リトライ付きfetch関数
+// リトライ付きfetch関数（リトライ 1回のみ、固定待機）
+// maxRetries/timeout を number として明示（as const のリテラル型伝播を回避）
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 2,
-  timeout = 10000,
+  maxRetries: number = TIMEOUT_CONFIG.CLIENT_MAX_RETRIES,
+  timeout: number = TIMEOUT_CONFIG.CLIENT_TIMEOUT_MS,
 ): Promise<Response> {
   let lastError: Error;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      // API呼び出し試行
       const response = await fetchWithTimeout(url, options, timeout);
       return response;
     } catch (error) {
       lastError = error as Error;
-      // 試行失敗
-
-      // 最後の試行でない場合は少し待機
       if (attempt < maxRetries) {
-        const delay = Math.min(1000 * 2 ** attempt, 5000); // 指数バックオフ（最大5秒）
-        // リトライ待機
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await new Promise((resolve) =>
+          setTimeout(resolve, TIMEOUT_CONFIG.CLIENT_RETRY_BACKOFF_MS),
+        );
       }
     }
   }
@@ -156,8 +172,8 @@ async function callGAS<T = unknown>(
     try {
       // 開発環境ではプロキシ経由、本番環境ではNetlify Functionsを使用
       const apiUrl = isDevelopment ? DEV_PROXY_URL : FUNC_URL;
-      // API呼び出し中
-      const res = await fetchWithRetry(apiUrl, fetchOptions, 2, 8000);
+      // API呼び出し中（タイムアウト・リトライは TIMEOUT_CONFIG で一元管理）
+      const res = await fetchWithRetry(apiUrl, fetchOptions);
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -280,6 +296,7 @@ export async function saveKintaiToServer(
         breakTime: data.breakTime, // string (HH:mm)
         endTime: data.endTime, // "HH:mm"
         location: data.location || "",
+        tasks: data.tasks || [],
         spreadsheetId,
         userId,
       },
@@ -315,7 +332,18 @@ export async function getKintaiHistory(
   return r.data as KintaiRecord[];
 }
 
-/* ========= getMonthlyData ========= */
+/* ========= getMonthlyData (SWR: Stale-While-Revalidate) ========= */
+/**
+ * Phase E-1: SWR パターン
+ * - 5分以内のキャッシュはそのまま返す（旧来の30分TTLと挙動同じ）
+ * - 5分超過でも stale cache を即返す → 裏で revalidate（ネットワーク最新化）
+ * - 裏タスクの成功: CustomEvent('kintai:data-updated') を発火 → UIが自動更新
+ * - 裏タスクの失敗: CustomEvent('kintai:data-stale') を発火 → UIが stale 警告
+ * - forceRefresh=true の場合は必ず同期フェッチ（ユーザー明示リフレッシュ）
+ */
+const SWR_FRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5分以内はキャッシュのみ
+const SWR_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24時間超過は stale扱いせず必ず待機
+
 export async function getMonthlyData(
   year: number,
   month: number,
@@ -325,29 +353,44 @@ export async function getMonthlyData(
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
 
-  // デバッグ: データ取得時の認証情報を確認
-  // 月次データ取得開始
-
   if (!token || !spreadsheetId || !userId) {
-    // 認証情報不足エラー
     throw new Error("認証情報が不足しています");
   }
 
-  // キャッシュキー
   const cacheKey = `${year}-${month}`;
 
-  // 既存のキャッシュをチェック（強制更新フラグがOFFの場合）
+  // 強制更新でなければキャッシュ判定
   if (!forceRefresh) {
-    const cachedData = getMonthlyDataFromCache(cacheKey);
-    if (cachedData) {
-      // キャッシュからデータを取得
-      return cachedData;
+    const cached = getMonthlyDataFromCacheAllowStale(cacheKey);
+    if (cached) {
+      const age = getMonthlyDataCacheAge(cacheKey);
+      // 24時間超過: stale すぎるので即座にはキャッシュを使わず通常フェッチ
+      if (age !== null && age < SWR_STALE_THRESHOLD_MS) {
+        // 5分超過 かつ オンライン なら裏で revalidate
+        if (age > SWR_FRESH_THRESHOLD_MS && navigator.onLine) {
+          void revalidateMonthlyDataInBackground(
+            year,
+            month,
+            spreadsheetId,
+            userId,
+          );
+        }
+        return cached;
+      }
     }
   }
 
-  // キャッシュになければサーバーから取得
-  // GASにリクエスト送信
+  // キャッシュなし / 24h超過 / forceRefresh: 通常フェッチ
+  return fetchMonthlyDataFromServer(year, month, spreadsheetId, userId);
+}
 
+// サーバーから月次データを取得して正規化＋キャッシュ保存
+async function fetchMonthlyDataFromServer(
+  year: number,
+  month: number,
+  spreadsheetId: string,
+  userId: string,
+): Promise<KintaiRecord[]> {
   const r = await callGAS<KintaiRecord[]>(
     "getMonthlyData",
     { spreadsheetId, userId, year, month },
@@ -432,42 +475,86 @@ export async function getMonthlyData(
     endTime: extractHHMM(rec.endTime),
     breakTime: normalizeBreak(rec.breakTime),
     workingTime: normalizeWork(rec.workingTime),
+    tasks: rec.tasks || [],
   }));
 
   // キャッシュに保存
-  saveMonthlyDataToCache(cacheKey, normalized);
+  saveMonthlyDataToCache(`${year}-${month}`, normalized);
 
   return normalized;
 }
 
-/* ========= 月間データキャッシュユーティリティ ========= */
-// キャッシュから月間データを取得
-function getMonthlyDataFromCache(cacheKey: string): KintaiRecord[] | null {
+// 裏で revalidate（SWR パターン）
+async function revalidateMonthlyDataInBackground(
+  year: number,
+  month: number,
+  spreadsheetId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const fresh = await fetchMonthlyDataFromServer(
+      year,
+      month,
+      spreadsheetId,
+      userId,
+    );
+    // UI に通知（KintaiContext が購読してフォーム/月次ビューを更新）
+    window.dispatchEvent(
+      new CustomEvent("kintai:data-updated", {
+        detail: { year, month, data: fresh },
+      }),
+    );
+  } catch (error) {
+    // revalidate 失敗: stale cache は既にUIに表示済み。サイレントに通知
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[kintai] バックグラウンド更新失敗（表示中のデータは古い可能性あり）:",
+      error,
+    );
+    window.dispatchEvent(
+      new CustomEvent("kintai:data-stale", {
+        detail: { year, month },
+      }),
+    );
+  }
+}
+
+/* ========= 月間データキャッシュユーティリティ（SWR対応） ========= */
+
+/**
+ * Phase E-1 SWR: TTLを無視して生のキャッシュを返す
+ * 返却後、呼び出し側が getMonthlyDataCacheAge() で年齢を確認して revalidate を判断する
+ */
+function getMonthlyDataFromCacheAllowStale(
+  cacheKey: string,
+): KintaiRecord[] | null {
   try {
     const cachedDataJson = sessionStorage.getItem(MONTHLY_DATA_KEY);
     if (!cachedDataJson) return null;
 
     const cachedDataMap = JSON.parse(cachedDataJson);
     const cachedData = cachedDataMap[cacheKey];
-
     if (!cachedData) return null;
 
-    // キャッシュ期限チェック（30分）
+    return cachedData;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * キャッシュの経過時間（ms）を返す。なければ null。
+ */
+function getMonthlyDataCacheAge(cacheKey: string): number | null {
+  try {
     const timestamp = parseInt(
       sessionStorage.getItem(`${MONTHLY_DATA_TIMESTAMP_KEY}_${cacheKey}`) ||
         "0",
       10,
     );
-    const now = Date.now();
-    const cacheAge = now - timestamp;
-
-    // 30分以上経過していたらキャッシュ無効
-    if (cacheAge > 30 * 60 * 1000) {
-      return null;
-    }
-
-    return cachedData;
-  } catch (e) {
+    if (!timestamp) return null;
+    return Date.now() - timestamp;
+  } catch {
     return null;
   }
 }
@@ -552,7 +639,8 @@ export async function getJobWageOptionsFromCsv(): Promise<
 
   try {
     // 開発・本番ともにフロントから直接取得
-    const res = await fetchWithRetry(csvUrl, { method: "GET" }, 2, 8000);
+    // CSVも共通 TIMEOUT_CONFIG（10.5s, retry 1回）を利用
+    const res = await fetchWithRetry(csvUrl, { method: "GET" });
     if (!res.ok) return [];
     const text = await res.text();
 
@@ -650,6 +738,7 @@ export async function getKintaiDataByDate(
         breakTime,
         endTime: formattedEndTime,
         location: record.location || "",
+        tasks: record.tasks || [],
         workingTime: record.workingTime || "", // スプレッドシートのF列から取得
       };
     }
@@ -683,6 +772,7 @@ export function getKintaiDataFromMonthlyData(
         breakTime,
         endTime: formattedEndTime,
         location: record.location || "",
+        tasks: record.tasks || [],
         workingTime: record.workingTime || "", // スプレッドシートのF列から取得
       };
     }
