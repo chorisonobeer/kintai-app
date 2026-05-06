@@ -1,26 +1,30 @@
 project: kintai-app
-updated: "2026-03-26"
+updated: "2026-05-06"
 
 current:
-  branch: feat/multi-task-support
-  goal: 複数作業対応（1日に複数の作業内容・時間を入力可能にする）
-  status: in_progress
-  done: "調査完了、実装計画策定済み（8+4回チェック）、ブランチ作成済み"
+  branch: feat/gas-performance
+  goal: GAS 経由 saveKintai/getMonthlyData の高速化（save 5s→1.5-2s, get warm 4s→50ms）
+  status: planned
+  done: "前セッションで認証脱 GAS 化完了 + saveKintai bug 修正 + main マージ済み"
   pending:
-    - "Step 1: src/types.ts に TaskEntry型追加、既存型にtasks追加"
-    - "Step 2: GAS/kintai.gs 7箇所変更（G1-G7）→ 手動デプロイ"
-    - "Step 3: src/utils/apiService.ts 4箇所にtasks追加"
-    - "Step 4: src/components/KintaiForm.tsx 15箇所変更（最大リスク）"
-    - "Step 5: src/components/MonthlyView.tsx 2箇所変更"
-    - "Step 5.5: src/contexts/KintaiContext.tsx 1箇所追加"
-    - "Step 6: src/styles.css 約60行CSS追加"
-    - "Step 7: テスト（9項目）"
+    - "main から feat/gas-performance ブランチを切る"
+    - "GAS/kintai.gs に最適化 A+B+C+D を実装（plan §3 参照）"
+    - "GAS デプロイ（VERSION を v12-perf-optim に更新）"
+    - "scripts/benchmark-gas-actions.mjs で性能検証"
+    - "scripts/audit-auth-migration.mjs で機能 regression なしを確認"
+    - "コミット → push → main マージ"
   context: >
-    実装ステップ: docs/implementation-steps.md
-    GAS変更仕様書: docs/gas-change-spec.md
+    plan: docs/plan-gas-performance-optimization.md
+    最適化案 A+B+C+D（書込集約 / formula 既設チェック / 行特定計算優先 / CacheService）。
+    E（楽観的更新）と F（Sheets API 直叩き）は不採用、理由は plan §1。
+    GAS/kintai.gs のみ編集、フロント・他 .gs ファイル・Netlify Function は触らない。
 
 next:
   - 給与計算機能（作業×時給×時間の自動集計）
-  - 作業内容マスタのGAS経由管理（CSV直取得からの移行）
+  - 作業内容マスタの GAS 経由管理（CSV 直取得からの移行）
+  - 楽観的更新（E）の検討（save UX を <200ms 体感に）
 
-history: []
+history:
+  - "2026-05-06 認証脱 GAS 化（auth-login Function + HMAC token）+ saveKintai 引数バグ修正 + URL 一元化"
+  - "2026-03-26 GAS 修正・最適化・読書時間短縮効率化（commit ded047c）"
+  - "2026-03-26 諸不具合修正（日次入力フォーム初期化など、commit 6506d77）"

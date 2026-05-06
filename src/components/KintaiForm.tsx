@@ -530,6 +530,11 @@ const KintaiForm: React.FC = () => {
     });
   };
 
+  // ユーザー入力中はエラーをクリア（古い検証結果が残って save ボタンが固まるのを防ぐ）
+  const clearStaleErrors = () => {
+    setErrors((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+  };
+
   const handleStartTimeChange = (time: string) => {
     setStartTime(time);
     isDirtyRef.current = true;
@@ -537,13 +542,8 @@ const KintaiForm: React.FC = () => {
       dispatch({ type: EditActionType.START_EDITING });
     }
     autoAdjustTasks(getWorkingMinutes(time, endTime, breakTime));
-    validateForm({
-      date: formState.date,
-      startTime: time,
-      breakTime,
-      endTime,
-      tasks,
-    });
+    clearStaleErrors();
+    // 検証は handleSubmit 時に validateForm が再走するのでここでは行わない
   };
 
   const handleBreakTimeChange = (timeString: string) => {
@@ -553,13 +553,7 @@ const KintaiForm: React.FC = () => {
       dispatch({ type: EditActionType.START_EDITING });
     }
     autoAdjustTasks(getWorkingMinutes(startTime, endTime, timeString));
-    validateForm({
-      date: formState.date,
-      startTime,
-      breakTime: timeString,
-      endTime,
-      tasks,
-    });
+    clearStaleErrors();
   };
 
   const handleEndTimeChange = (time: string) => {
@@ -569,13 +563,7 @@ const KintaiForm: React.FC = () => {
       dispatch({ type: EditActionType.START_EDITING });
     }
     autoAdjustTasks(getWorkingMinutes(startTime, time, breakTime));
-    validateForm({
-      date: formState.date,
-      startTime,
-      breakTime,
-      endTime: time,
-      tasks,
-    });
+    clearStaleErrors();
   };
 
   // 作業操作ハンドラ
@@ -594,12 +582,14 @@ const KintaiForm: React.FC = () => {
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
+    clearStaleErrors();
   };
 
   const handleRemoveTask = (index: number) => {
     if (tasks.length <= 1) return;
     setTasks((prev) => prev.filter((_, i) => i !== index));
     isDirtyRef.current = true;
+    clearStaleErrors();
   };
 
   const handleTaskJobChange = (index: number, job: string) => {
@@ -610,6 +600,7 @@ const KintaiForm: React.FC = () => {
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
+    clearStaleErrors();
   };
 
   const handleTaskHoursChange = (index: number, hours: number) => {
@@ -634,6 +625,7 @@ const KintaiForm: React.FC = () => {
     if (!formState.isEditing) {
       dispatch({ type: EditActionType.START_EDITING });
     }
+    clearStaleErrors();
   };
 
   // フォーム検証

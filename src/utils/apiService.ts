@@ -11,13 +11,10 @@
 
 import { KintaiData, KintaiRecord } from "../types";
 
-// Vite環境変数から開発モードかどうかを判定
-const isDevelopment = import.meta.env.DEV;
-
 /* ========= 定数 ========= */
-// 開発環境ではプロキシ経由でGAS APIを呼び出し、本番環境ではNetlify Functionsを使用
-const FUNC_URL = "/.netlify/functions/kintai-api"; // 本番環境でNetlify Functionsを経由する
-const DEV_PROXY_URL = "/api/gas"; // 開発環境でプロキシ経由でGASを呼び出す
+// dev/prod 共通で Netlify Function 経由。netlify dev (port 8888) で同パスが解決される。
+const FUNC_URL = "/.netlify/functions/kintai-api";
+const AUTH_LOGIN_URL = "/.netlify/functions/auth-login";
 
 // デバッグ用ログ
 // API Service 初期化
@@ -170,8 +167,10 @@ async function callGAS<T = unknown>(
   // リクエストをキャッシュに追加
   const requestPromise = (async (): Promise<ApiOk<T>> => {
     try {
-      // 開発環境ではプロキシ経由、本番環境ではNetlify Functionsを使用
-      const apiUrl = isDevelopment ? DEV_PROXY_URL : FUNC_URL;
+      // dev/prod 共通で Netlify Function を経由（netlify dev で /.netlify/functions/* が
+      // 解決される）。/api/gas プロキシ経由は GAS の 302 リダイレクトで CORS/CSP が
+      // 不安定になるため使わない。
+      const apiUrl = FUNC_URL;
       // API呼び出し中（タイムアウト・リトライは TIMEOUT_CONFIG で一元管理）
       const res = await fetchWithRetry(apiUrl, fetchOptions);
 
@@ -238,18 +237,51 @@ export async function login(
 
     // 既存データクリア完了
 
-    const r = await callGAS<never>("login", { name, password });
+    // Phase 3: GAS 経由ではなく Netlify Function 直叩きで認証
+    //   - メンバーリストを SA で読込 → 名前+パスワード照合 → HMAC token 発行
+    //   - GAS 側 Auth.checkToken も同 HMAC 鍵で token を検証可能（Phase 3 GAS 更新）
+    const res = await fetch(AUTH_LOGIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, password }),
+    });
 
-    // ログイン成功
+    let r: {
+      ok: boolean;
+      err?: string;
+      token?: string;
+      userId?: string;
+      userName?: string;
+      spreadsheetId?: string;
+    };
+    try {
+      r = await res.json();
+    } catch {
+      return {
+        success: false,
+        error: `認証サーバーから不正な応答 (HTTP ${res.status})`,
+      };
+    }
+
+    if (!res.ok || !r.ok) {
+      return {
+        success: false,
+        error: r.err || `認証に失敗 (HTTP ${res.status})`,
+      };
+    }
+
+    if (!r.token || !r.userId || !r.userName || !r.spreadsheetId) {
+      return {
+        success: false,
+        error: "認証応答に必須フィールドが欠落しています",
+      };
+    }
 
     // 新しい認証情報を保存
-    localStorage.setItem(TOKEN_KEY, r.token as string);
-    localStorage.setItem(USER_ID_KEY, r.userId as string);
-    localStorage.setItem(USER_NAME_KEY, r.userName as string);
-    localStorage.setItem(SHEET_ID_KEY, r.spreadsheetId as string);
-
-    // デバッグ: 保存後の値を確認
-    // localStorage保存完了
+    localStorage.setItem(TOKEN_KEY, r.token);
+    localStorage.setItem(USER_ID_KEY, r.userId);
+    localStorage.setItem(USER_NAME_KEY, r.userName);
+    localStorage.setItem(SHEET_ID_KEY, r.spreadsheetId);
 
     return { success: true };
   } catch (e) {

@@ -73,6 +73,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 以下のリクエストは SW で一切手を出さず、ブラウザのデフォルトに任せる:
+  // - GET 以外（POST/PUT/DELETE は API 呼び出し。キャッシュ不可、傍受で壊れる）
+  // - 別オリジン（GAS / fonts / 解析サービス等。CSP/CORS の問題を回避）
+  // - Netlify Functions（API。SWR/キャッシュは apiService 側で管理）
+  // - Vite HMR / dev サーバー専用パス
+  if (event.request.method !== 'GET') return;
+  const reqUrl = new URL(event.request.url);
+  if (reqUrl.origin !== self.location.origin) return;
+  if (reqUrl.pathname.startsWith('/.netlify/')) return;
+  if (reqUrl.pathname.startsWith('/api/')) return;
+  // Vite dev サーバーのモジュール提供パスは一切 intercept しない
+  // (キャッシュすると HMR/編集後の最新モジュールがブラウザに届かなくなる)
+  if (reqUrl.pathname.startsWith('/@vite/')) return;
+  if (reqUrl.pathname.startsWith('/@react-refresh')) return;
+  if (reqUrl.pathname.startsWith('/@id/')) return;
+  if (reqUrl.pathname.startsWith('/@fs/')) return;
+  if (reqUrl.pathname.startsWith('/node_modules/')) return;
+  if (reqUrl.pathname.startsWith('/src/')) return;
+  if (reqUrl.search.includes('?import') || reqUrl.search.includes('?t=')) return;
+
   // HTMLリクエストはネットワーク優先 + バージョンチェック
   if (event.request.destination === 'document') {
     event.respondWith(
@@ -125,11 +145,14 @@ self.addEventListener('fetch', (event) => {
           }
         );
       })
-      .catch(() => {
+      .catch(async () => {
         // オフライン時のフォールバック
         if (event.request.destination === 'document') {
-          return caches.match('/index.html');
+          const fallback = await caches.match('/index.html');
+          if (fallback) return fallback;
         }
+        // Response を必ず返す（undefined を返すと "Failed to convert value to 'Response'" になる）
+        return Response.error();
       })
   );
 });
