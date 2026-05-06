@@ -3,7 +3,7 @@
  * メインエントリーポイントとリクエスト処理を提供するモジュール
  */
 
-const VERSION = 'v10-version-management';
+const VERSION = 'v12-perf-optim';
 const VERSION_HISTORY = [
   { version: 'v1-initial', date: '2024-01-01', description: '初期バージョン' },
   { version: 'v2-auth', date: '2024-02-01', description: '認証機能追加' },
@@ -14,7 +14,8 @@ const VERSION_HISTORY = [
   { version: 'v7-mobile', date: '2024-07-01', description: 'モバイル対応' },
   { version: 'v8-ui-improvements', date: '2024-08-01', description: 'UI改善' },
   { version: 'v9-monthly-data', date: '2024-09-01', description: '月次データ機能強化' },
-  { version: 'v10-version-management', date: '2025-01-13', description: 'バージョン管理機能追加' }
+  { version: 'v10-version-management', date: '2025-01-13', description: 'バージョン管理機能追加' },
+  { version: 'v12-perf-optim', date: '2026-05-07', description: 'saveKintai 1-trip化 + getMonthlyData キャッシュ + I 列給与計算 + 時給マスタAPI' }
 ];
 
 // GETリクエスト処理（ヘルスチェック）
@@ -68,6 +69,8 @@ function doPost(e) {
         return Kintai.handleSaveKintai(parsedRequest.payload, parsedRequest.token, parsedRequest.debug, diagInfo);
       case 'getMonthlyData':
         return Kintai.handleGetMonthlyData(parsedRequest.payload, parsedRequest.token, parsedRequest.debug, diagInfo);
+      case 'getJobWageOptions':
+        return Kintai.handleGetJobWageOptions(parsedRequest.payload, parsedRequest.token, parsedRequest.debug, diagInfo);
       case 'getVersion':
         return handleGetVersion(parsedRequest.debug, diagInfo);
       case 'getVersionHistory':

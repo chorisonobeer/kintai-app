@@ -305,9 +305,13 @@ export async function logout(): Promise<void> {
   }
 }
 
-/* ========= saveKintai ========= */
+/* ========= saveKintai (旧 API、互換のため残す) ========= */
+/**
+ * 同期保存（旧 API）。新規呼び出しは enqueueSave を推奨。
+ * v12: 全月キャッシュ削除を廃止、該当月のみ invalidate に変更（SWR 破壊回避）
+ */
 export async function saveKintaiToServer(
-  data: KintaiData, // KintaiData型は { date: string; startTime: string; breakTime: string; endTime: string; location?: string; }
+  data: KintaiData,
 ): Promise<{ success: boolean; error?: string }> {
   const token = localStorage.getItem(TOKEN_KEY);
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
@@ -318,15 +322,13 @@ export async function saveKintaiToServer(
   }
 
   try {
-    // 送信するペイロードには、date, startTime, breakTime (HH:mm形式), endTime, location のみ含まれる
-    // F列に相当する「計算された勤務時間」はフロントエンドからは送信していない
     await callGAS(
       "saveKintai",
       {
         date: data.date,
-        startTime: data.startTime, // "HH:mm"
-        breakTime: data.breakTime, // string (HH:mm)
-        endTime: data.endTime, // "HH:mm"
+        startTime: data.startTime,
+        breakTime: data.breakTime,
+        endTime: data.endTime,
         location: data.location || "",
         tasks: data.tasks || [],
         spreadsheetId,
@@ -335,12 +337,402 @@ export async function saveKintaiToServer(
       true,
     );
 
-    clearMonthlyDataCache();
+    // 該当月のみ invalidate（旧来の全月削除は SWR を破壊するため廃止）
+    invalidateMonthCache(data.date);
 
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
   }
+}
+
+/* ========= 楽観的更新（saveKintai 新 API） ========= */
+
+const PENDING_QUEUE_KEY = "pending_kintai_saves_v1";
+const PENDING_QUEUE_MAX = 100;
+
+export interface PendingSaveEntry {
+  id: string;
+  userId: string;
+  spreadsheetId: string;
+  data: KintaiData;
+  rollback: KintaiRecord | null; // 適用直前の値、無ければ null（新規）
+  cacheKey: string; // `${year}-${month}`
+  attempts: number;
+  enqueuedAt: number;
+  status: "pending" | "in_flight" | "failed";
+}
+
+let isFlushing = false;
+
+function readPendingQueue(): PendingSaveEntry[] {
+  try {
+    const raw = localStorage.getItem(PENDING_QUEUE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as PendingSaveEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingQueue(queue: PendingSaveEntry[]): void {
+  try {
+    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+  } catch {
+    /* localStorage 容量超過等は無視 */
+  }
+}
+
+function dateToCacheKey(dateYYYYMMDD: string): string {
+  // "2026-05-07" → "2026-5"
+  const m = dateYYYYMMDD.match(/^(\d{4})-(\d{1,2})/);
+  if (!m) return "";
+  return `${parseInt(m[1], 10)}-${parseInt(m[2], 10)}`;
+}
+
+function invalidateMonthCache(dateYYYYMMDD: string): void {
+  try {
+    const cacheKey = dateToCacheKey(dateYYYYMMDD);
+    if (!cacheKey) return;
+    sessionStorage.removeItem(`${MONTHLY_DATA_TIMESTAMP_KEY}_${cacheKey}`);
+    // データ自体は残す（楽観値のため）。次回 getMonthlyData で age=null → cold fetch
+  } catch {
+    /* ignore */
+  }
+}
+
+function getCacheMap(): Record<string, KintaiRecord[]> {
+  try {
+    const raw = sessionStorage.getItem(MONTHLY_DATA_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function setCacheForMonth(cacheKey: string, records: KintaiRecord[]): void {
+  try {
+    const map = getCacheMap();
+    map[cacheKey] = records;
+    sessionStorage.setItem(MONTHLY_DATA_KEY, JSON.stringify(map));
+    // タイムスタンプは更新しない（楽観値は revalidate 対象、age=null → 即 fetch 可）
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 楽観値を sessionStorage cache に適用し、適用直前の値を entry.rollback に保存。
+ * - cache 不在時は新規 cache を作成
+ * - delete (全フィールド空 + tasks=[]) は array から remove
+ * - タイムスタンプは更新しない（revalidate を促すため）
+ */
+function applyOptimisticToCache(entry: PendingSaveEntry): void {
+  const map = getCacheMap();
+  const list = Array.isArray(map[entry.cacheKey]) ? map[entry.cacheKey] : [];
+  const idx = list.findIndex((r) => r.date === entry.data.date);
+
+  // rollback 用に適用直前の値を記録
+  entry.rollback = idx >= 0 ? { ...list[idx] } : null;
+
+  const isDelete =
+    !entry.data.startTime &&
+    !entry.data.endTime &&
+    (!entry.data.tasks || entry.data.tasks.length === 0) &&
+    (!entry.data.location || entry.data.location.trim() === "");
+
+  let next = list.slice();
+  if (isDelete) {
+    if (idx >= 0) next.splice(idx, 1);
+  } else {
+    const optimisticRecord: KintaiRecord = {
+      date: entry.data.date,
+      userName: list[idx]?.userName || "",
+      userId: entry.userId,
+      startTime: entry.data.startTime,
+      breakTime: entry.data.breakTime,
+      endTime: entry.data.endTime,
+      workingTime: entry.data.workingTime || list[idx]?.workingTime || "",
+      location: entry.data.location || "",
+      tasks: entry.data.tasks || [],
+    };
+    if (idx >= 0) {
+      next[idx] = optimisticRecord;
+    } else {
+      next.push(optimisticRecord);
+      next.sort((a, b) => a.date.localeCompare(b.date));
+    }
+  }
+  setCacheForMonth(entry.cacheKey, next);
+}
+
+/**
+ * rollback: 適用直前の値で復元。
+ * - rollback あり → record を rollback で置換
+ * - rollback null → array から remove
+ */
+function applyRollbackToCache(entry: PendingSaveEntry): void {
+  const map = getCacheMap();
+  const list = Array.isArray(map[entry.cacheKey]) ? map[entry.cacheKey] : [];
+  const idx = list.findIndex((r) => r.date === entry.data.date);
+  const next = list.slice();
+  if (entry.rollback) {
+    if (idx >= 0) next[idx] = entry.rollback;
+    else {
+      next.push(entry.rollback);
+      next.sort((a, b) => a.date.localeCompare(b.date));
+    }
+  } else {
+    if (idx >= 0) next.splice(idx, 1);
+  }
+  setCacheForMonth(entry.cacheKey, next);
+}
+
+/**
+ * revalidate 完了時、サーバ確定値に queue 内 pending を再 apply して merge した array を返す。
+ * 同月の pending entry が複数ある場合は enqueue 順に上書き適用（FIFO）。
+ */
+export function overlayPendingOnto(
+  serverData: KintaiRecord[],
+  year: number,
+  month: number,
+): KintaiRecord[] {
+  const cacheKey = `${year}-${month}`;
+  const queue = readPendingQueue().filter((e) => e.cacheKey === cacheKey);
+  if (queue.length === 0) return serverData;
+
+  let merged = serverData.slice();
+  for (const entry of queue) {
+    const idx = merged.findIndex((r) => r.date === entry.data.date);
+    const isDelete =
+      !entry.data.startTime &&
+      !entry.data.endTime &&
+      (!entry.data.tasks || entry.data.tasks.length === 0) &&
+      (!entry.data.location || entry.data.location.trim() === "");
+    if (isDelete) {
+      if (idx >= 0) merged.splice(idx, 1);
+      continue;
+    }
+    const optimistic: KintaiRecord = {
+      date: entry.data.date,
+      userName: merged[idx]?.userName || "",
+      userId: entry.userId,
+      startTime: entry.data.startTime,
+      breakTime: entry.data.breakTime,
+      endTime: entry.data.endTime,
+      workingTime: entry.data.workingTime || merged[idx]?.workingTime || "",
+      location: entry.data.location || "",
+      tasks: entry.data.tasks || [],
+    };
+    if (idx >= 0) merged[idx] = optimistic;
+    else {
+      merged.push(optimistic);
+      merged.sort((a, b) => a.date.localeCompare(b.date));
+    }
+  }
+  return merged;
+}
+
+/**
+ * 楽観的保存: 即時 cache & UI 更新 + 裏で送信。
+ * 失敗時は applyRollbackToCache + kintai:save-failed イベント発火。
+ */
+export function enqueueSave(data: KintaiData): {
+  success: boolean;
+  error?: string;
+} {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
+  const userId = localStorage.getItem(USER_ID_KEY);
+
+  if (!token || !spreadsheetId || !userId) {
+    return { success: false, error: "ログイン情報が不足しています" };
+  }
+
+  const cacheKey = dateToCacheKey(data.date);
+  if (!cacheKey) {
+    return { success: false, error: "日付形式が不正です" };
+  }
+
+  const entry: PendingSaveEntry = {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    userId,
+    spreadsheetId,
+    data,
+    rollback: null,
+    cacheKey,
+    attempts: 0,
+    enqueuedAt: Date.now(),
+    status: "pending",
+  };
+
+  // 楽観 cache 適用（rollback フィールドが entry に書き込まれる）
+  applyOptimisticToCache(entry);
+
+  // queue 追加 + 容量制御
+  const queue = readPendingQueue();
+  queue.push(entry);
+  while (queue.length > PENDING_QUEUE_MAX) queue.shift();
+  writePendingQueue(queue);
+
+  // UI 即時通知（Context が monthlyData を再構築）
+  const [yearStr, monthStr] = cacheKey.split("-");
+  window.dispatchEvent(
+    new CustomEvent("kintai:save-optimistic", {
+      detail: {
+        year: parseInt(yearStr, 10),
+        month: parseInt(monthStr, 10),
+        date: data.date,
+      },
+    }),
+  );
+
+  // 裏で送信開始（fire-and-forget）
+  void flushSaveQueue();
+
+  return { success: true };
+}
+
+/**
+ * queue を FIFO で送信。同時実行排他制御 + ユーザー一致チェック。
+ * 失敗時は 1 回 retry、再失敗で rollback + イベント発火。
+ */
+export async function flushSaveQueue(): Promise<void> {
+  if (isFlushing) return;
+  isFlushing = true;
+  try {
+    const currentUserId = localStorage.getItem(USER_ID_KEY);
+    const currentSheet = localStorage.getItem(SHEET_ID_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!currentUserId || !currentSheet || !token) return;
+
+    while (true) {
+      const queue = readPendingQueue();
+      // 現在ユーザーと一致する pending entry を先頭から拾う
+      const idx = queue.findIndex(
+        (e) =>
+          e.status !== "failed" &&
+          e.userId === currentUserId &&
+          e.spreadsheetId === currentSheet,
+      );
+      if (idx < 0) break;
+
+      const entry = queue[idx];
+      entry.status = "in_flight";
+      entry.attempts += 1;
+      writePendingQueue(queue);
+
+      try {
+        await callGAS(
+          "saveKintai",
+          {
+            date: entry.data.date,
+            startTime: entry.data.startTime,
+            breakTime: entry.data.breakTime,
+            endTime: entry.data.endTime,
+            location: entry.data.location || "",
+            tasks: entry.data.tasks || [],
+            spreadsheetId: entry.spreadsheetId,
+            userId: entry.userId,
+          },
+          true,
+        );
+
+        // 成功: queue から remove。cache 楽観値はそのままサーバ確定値と一致。
+        const after = readPendingQueue().filter((e) => e.id !== entry.id);
+        writePendingQueue(after);
+
+        // 次回 getMonthlyData でサーバ最新を取り込めるよう該当月 invalidate
+        invalidateMonthCache(entry.data.date);
+
+        const [y, m] = entry.cacheKey.split("-");
+        window.dispatchEvent(
+          new CustomEvent("kintai:save-confirmed", {
+            detail: {
+              year: parseInt(y, 10),
+              month: parseInt(m, 10),
+              date: entry.data.date,
+            },
+          }),
+        );
+      } catch (err) {
+        const msg = (err as Error)?.message || String(err);
+        if (entry.attempts < 2) {
+          // 1 回 retry: queue の先頭を pending に戻して次ループで再送
+          const after = readPendingQueue();
+          const eIdx = after.findIndex((e) => e.id === entry.id);
+          if (eIdx >= 0) {
+            after[eIdx].status = "pending";
+            writePendingQueue(after);
+          }
+          // backoff
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          continue;
+        }
+        // 再失敗: rollback + failed マーク + イベント発火
+        applyRollbackToCache(entry);
+        const after = readPendingQueue();
+        const eIdx2 = after.findIndex((e) => e.id === entry.id);
+        if (eIdx2 >= 0) {
+          after[eIdx2].status = "failed";
+          writePendingQueue(after);
+        }
+        const [y, m] = entry.cacheKey.split("-");
+        window.dispatchEvent(
+          new CustomEvent("kintai:save-failed", {
+            detail: {
+              year: parseInt(y, 10),
+              month: parseInt(m, 10),
+              date: entry.data.date,
+              error: msg,
+              entryId: entry.id,
+            },
+          }),
+        );
+        // 失敗エントリは queue に残す（手動 retry / 起動時再送の対象外）
+        break;
+      }
+    }
+  } finally {
+    isFlushing = false;
+  }
+}
+
+/**
+ * App 起動時に呼ぶ: localStorage の queue をチェックして未送信があれば送信開始。
+ * online イベントでも flushSaveQueue が走るよう listener を登録。
+ */
+export function initPendingSaveQueue(): void {
+  // online 復帰時に再送
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", () => {
+      void flushSaveQueue();
+    });
+    // 起動時: 失敗マークでないものを再送
+    const queue = readPendingQueue();
+    if (queue.some((e) => e.status !== "failed")) {
+      void flushSaveQueue();
+    }
+  }
+}
+
+/**
+ * 失敗エントリの手動 retry（UI から呼ぶ用）。
+ */
+export function retryFailedSave(entryId: string): void {
+  const queue = readPendingQueue();
+  const idx = queue.findIndex((e) => e.id === entryId);
+  if (idx < 0) return;
+  queue[idx].status = "pending";
+  queue[idx].attempts = 0;
+  writePendingQueue(queue);
+  void flushSaveQueue();
 }
 
 /* ========= getHistory ========= */
@@ -643,57 +1035,59 @@ export function clearMonthlyDataCache(): void {
  *  - 勤務場所対応追加
  *  ──────────────────────────────────────────────────────────
  */
-export async function getJobWageOptionsFromCsv(): Promise<
+/**
+ * 時給マスタ（仕事内容・時給）を GAS 経由で取得。
+ * v12: 公開 CSV 直叩き廃止 → GAS の handleGetJobWageOptions を呼ぶ。
+ *      GAS 側で CacheService 30 分、フロント側でも sessionStorage 30 分でフォールバック。
+ *      API 失敗時は前回キャッシュを TTL 切れでも返す（UX 維持）。
+ *      キャッシュキーは _v2 サフィックスで旧 CSV キャッシュ（job_wage_options）と分離。
+ */
+export async function getJobWageOptions(): Promise<
   Array<{ job: string; wage: number | null }>
 > {
-  const cacheKey = "job_wage_options";
-  const tsKey = "job_wage_options_ts";
+  const cacheKey = "job_wage_options_v2";
+  const tsKey = "job_wage_options_v2_ts";
   const ttlMs = 30 * 60 * 1000; // 30分
 
-  // キャッシュ確認
+  // 旧キャッシュを起動時に掃除（残存していると別経路で誤参照される可能性を排除）
   try {
-    const cached = sessionStorage.getItem(cacheKey);
+    sessionStorage.removeItem("job_wage_options");
+    sessionStorage.removeItem("job_wage_options_ts");
+  } catch {}
+
+  const readCache = (): Array<{ job: string; wage: number | null }> | null => {
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (!cached) return null;
+      return JSON.parse(cached) as Array<{
+        job: string;
+        wage: number | null;
+      }>;
+    } catch {
+      return null;
+    }
+  };
+
+  // 鮮度内キャッシュなら即返却
+  try {
     const tsRaw = sessionStorage.getItem(tsKey);
-    if (cached && tsRaw) {
+    if (tsRaw) {
       const ts = parseInt(tsRaw, 10);
       if (!Number.isNaN(ts) && Date.now() - ts < ttlMs) {
-        return JSON.parse(cached);
+        const fresh = readCache();
+        if (fresh) return fresh;
       }
     }
   } catch {}
 
-  // CSV公開URL（環境変数優先、未設定なら安全に既定URLを使用）
-  const fallbackUrl =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTMitO8OL_jLUXrm6etS4CRtg6TZsnGmpLoyxwkedI50wMwnat0l3H_8EQWDno8UIMT0tHYkzmz0cSq/pub?gid=55512795&single=true&output=csv";
-  const csvUrl =
-    (import.meta.env.VITE_CSV_LOCATION_URL as string | undefined) ||
-    fallbackUrl;
-
   try {
-    // 開発・本番ともにフロントから直接取得
-    // CSVも共通 TIMEOUT_CONFIG（10.5s, retry 1回）を利用
-    const res = await fetchWithRetry(csvUrl, { method: "GET" });
-    if (!res.ok) return [];
-    const text = await res.text();
+    const r = await callGAS<Array<{ job: string; wage: number | null }>>(
+      "getJobWageOptions",
+      {},
+      true,
+    );
+    const data = (r.data as Array<{ job: string; wage: number | null }>) || [];
 
-    // CSVパース
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    const data: Array<{ job: string; wage: number | null }> = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      // 先頭行がヘッダならスキップ（例: 仕事内容,時給）
-      if (i === 0 && /仕事内容/i.test(line) && /時給/i.test(line)) continue;
-      const parts = line.split(",").map((s) => s.trim());
-      const job = parts[0] || "";
-      const wageStr = parts[1] || "";
-      const wageNum = wageStr ? Number(wageStr) : NaN;
-      const wage = Number.isFinite(wageNum) ? wageNum : null;
-      if (job) {
-        data.push({ job, wage });
-      }
-    }
-
-    // キャッシュ保存
     try {
       sessionStorage.setItem(cacheKey, JSON.stringify(data));
       sessionStorage.setItem(tsKey, String(Date.now()));
@@ -701,7 +1095,9 @@ export async function getJobWageOptionsFromCsv(): Promise<
 
     return data;
   } catch {
-    return [];
+    // API 失敗時は TTL 切れでもキャッシュを返す
+    const stale = readCache();
+    return stale ?? [];
   }
 }
 // ISO日付文字列やDateオブジェクトから "HH:mm" 形式を抽出するヘルパー

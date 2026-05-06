@@ -31,7 +31,7 @@ function updateVersionPlugin() {
   };
 }
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(() => {
   // ビルド時に現在時刻を設定
   const buildTime = new Date().toISOString();
 

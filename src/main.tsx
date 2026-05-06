@@ -55,7 +55,11 @@ try {
       });
     });
     try {
-      inpObserver.observe({ type: "event", buffered: true, durationThreshold: 40 } as PerformanceObserverInit);
+      inpObserver.observe({
+        type: "event",
+        buffered: true,
+        durationThreshold: 40,
+      } as PerformanceObserverInit);
     } catch {
       // event timing 非対応ブラウザは無視
     }
@@ -73,7 +77,10 @@ setTimeout(() => {
     if (marks.length) {
       // eslint-disable-next-line no-console
       console.table(
-        marks.map((m) => ({ name: m.name, elapsed_ms: Math.round(m.startTime) })),
+        marks.map((m) => ({
+          name: m.name,
+          elapsed_ms: Math.round(m.startTime),
+        })),
       );
     }
     const resources = performance
