@@ -9,14 +9,12 @@ const MobileTimePicker: React.FC<MobileTimePickerProps> = ({
   disabled = false,
 }) => {
   return (
-    <div className="form-group time-picker-group">
-      <DrumTimePicker
-        label={label}
-        value={value || ""}
-        onChange={onChange}
-        disabled={disabled}
-      />
-    </div>
+    <DrumTimePicker
+      label={label}
+      value={value || ""}
+      onChange={onChange}
+      disabled={disabled}
+    />
   );
 };
 

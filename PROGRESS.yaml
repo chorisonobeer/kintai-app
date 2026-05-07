@@ -16,6 +16,7 @@ next:
   - Phase B: Service Worker Background Sync 統合（PWA オフライン対応強化）
 
 history:
+  - "2026-05-07 日次入力フォーム UI 全面再設計（styled-components / 100dvh 1画面収納 / clamp+dvh / グラデ廃止 / 絵文字→SVG / 長押し維持）"
   - "2026-05-07 GAS 高速化(A+C+D)+I列給与計算(F)+時給マスタAPI(E)+楽観的更新+Toast+Login UI 刷新"
   - "2026-05-06 認証脱 GAS 化（auth-login Function + HMAC token）+ saveKintai 引数バグ修正 + URL 一元化"
   - "2026-03-26 GAS 修正・最適化・読書時間短縮効率化（commit ded047c）"
