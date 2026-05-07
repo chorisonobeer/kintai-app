@@ -214,18 +214,30 @@ const KintaiForm: React.FC = () => {
     setWorkingTime(calculateWorkingTime(startTime, endTime, breakTime));
   }, [startTime, endTime, breakTime]);
 
-  // 仕事一覧の遅延ロード
+  // 作業一覧（時給設定シート由来）— マウント時に即ロード。
+  // 遅延ロードだとドロップダウンが空のまま開いてフォールバックが見えてしまうため、
+  // 認証済みになった瞬間に取得してハードコードリストを表示させない。
   const jobOptionsLoadedRef = useRef(false);
+  const [jobOptionsLoading, setJobOptionsLoading] = useState(false);
   const loadJobOptions = async () => {
     if (jobOptionsLoadedRef.current) return;
     jobOptionsLoadedRef.current = true;
+    setJobOptionsLoading(true);
     try {
       const list = await getJobWageOptions();
       setJobOptions(list);
     } catch {
       jobOptionsLoadedRef.current = false;
+    } finally {
+      setJobOptionsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    loadJobOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 月同期
   useEffect(() => {
@@ -667,22 +679,22 @@ const KintaiForm: React.FC = () => {
                 $empty={!task.job}
                 aria-label="作業内容"
               >
-                <option value="">作業を選択</option>
-                {jobOptions && jobOptions.length > 0 ? (
-                  jobOptions.map((opt) => (
-                    <option key={opt.job} value={opt.job}>
-                      {opt.job}
-                      {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="田んぼ">田んぼ</option>
-                    <option value="柿農園">柿農園</option>
-                    <option value="事務所">事務所</option>
-                    <option value="その他">その他</option>
-                  </>
-                )}
+                <option value="">
+                  {jobOptionsLoading && jobOptions.length === 0
+                    ? "読込中..."
+                    : "作業を選択"}
+                </option>
+                {jobOptions.map((opt) => (
+                  <option key={opt.job} value={opt.job}>
+                    {opt.job}
+                    {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
+                  </option>
+                ))}
+                {/* 既存値が現マスタに存在しない場合の互換表示（自動消去防止） */}
+                {task.job &&
+                  !jobOptions.some((o) => o.job === task.job) && (
+                    <option value={task.job}>{task.job}</option>
+                  )}
               </TaskJobSelect>
               <TaskHoursWrap>
                 <DrumTimePicker
