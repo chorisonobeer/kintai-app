@@ -1047,12 +1047,13 @@ export function clearMonthlyDataCache(): void {
  *      API 失敗時は前回キャッシュを TTL 切れでも返す（UX 維持）。
  *      キャッシュキーは _v2 サフィックスで旧 CSV キャッシュ（job_wage_options）と分離。
  */
-export async function getJobWageOptions(): Promise<
-  Array<{ job: string; wage: number | null }>
-> {
+export async function getJobWageOptions(
+  options?: { forceRefresh?: boolean },
+): Promise<Array<{ job: string; wage: number | null }>> {
   const cacheKey = "job_wage_options_v2";
   const tsKey = "job_wage_options_v2_ts";
   const ttlMs = 30 * 60 * 1000; // 30分
+  const forceRefresh = !!options?.forceRefresh;
 
   // 旧キャッシュを起動時に掃除（残存していると別経路で誤参照される可能性を排除）
   try {
@@ -1073,36 +1074,55 @@ export async function getJobWageOptions(): Promise<
     }
   };
 
-  // 鮮度内キャッシュなら即返却
-  try {
-    const tsRaw = sessionStorage.getItem(tsKey);
-    if (tsRaw) {
-      const ts = parseInt(tsRaw, 10);
-      if (!Number.isNaN(ts) && Date.now() - ts < ttlMs) {
-        const fresh = readCache();
-        if (fresh) return fresh;
+  // 鮮度内キャッシュなら即返却（ただし空配列は無視 = 再取得）
+  if (!forceRefresh) {
+    try {
+      const tsRaw = sessionStorage.getItem(tsKey);
+      if (tsRaw) {
+        const ts = parseInt(tsRaw, 10);
+        if (!Number.isNaN(ts) && Date.now() - ts < ttlMs) {
+          const fresh = readCache();
+          if (fresh && fresh.length > 0) return fresh;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  } else {
+    // 強制再取得時は古いキャッシュを明示的に削除
+    try {
+      sessionStorage.removeItem(cacheKey);
+      sessionStorage.removeItem(tsKey);
+    } catch {}
+  }
 
   try {
     const r = await callGAS<Array<{ job: string; wage: number | null }>>(
       "getJobWageOptions",
-      {},
+      forceRefresh ? { forceRefresh: true } : {},
       true,
     );
     const data = (r.data as Array<{ job: string; wage: number | null }>) || [];
 
-    try {
-      sessionStorage.setItem(cacheKey, JSON.stringify(data));
-      sessionStorage.setItem(tsKey, String(Date.now()));
-    } catch {}
+    // 空配列はキャッシュしない（次回再取得で回復させる）
+    if (data.length > 0) {
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        sessionStorage.setItem(tsKey, String(Date.now()));
+      } catch {}
+    }
+
+    if (data.length === 0) {
+      console.warn(
+        "[getJobWageOptions] GAS から空配列が返却されました。時給設定シートの内容またはシート名（時給設定）を確認してください。debug:",
+        r.debug,
+      );
+    }
 
     return data;
-  } catch {
-    // API 失敗時は TTL 切れでもキャッシュを返す
+  } catch (err) {
+    console.error("[getJobWageOptions] API 失敗:", err);
+    // API 失敗時は TTL 切れでもキャッシュを返す（空配列は除外）
     const stale = readCache();
-    return stale ?? [];
+    return stale && stale.length > 0 ? stale : [];
   }
 }
 // ISO日付文字列やDateオブジェクトから "HH:mm" 形式を抽出するヘルパー
