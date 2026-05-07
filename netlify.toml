@@ -11,15 +11,11 @@
   VITE_CONTEXT = "$CONTEXT"
 
 
-[dev]
-  command    = "npm run dev"   # ← ご自身の Vite 起動コマンド
-  targetPort = 5173            # ← Vite が listen するポート
-  port       = 8888            # ← Netlify Dev がブラウザに見せるポート
-  framework  = "#custom"       # ★ ここを変更！
-  autoLaunch = true
-    edgeFunctionsPort = 0
+# ローカル開発は `netlify dev` を使わず、
+# `npm run dev` (Vite + netlify functions:serve を concurrently) で起動する。
+# 詳細は CLAUDE.md「開発コマンド」節を参照。
 
-# 以下はそのまま ─────────────
+
 [[headers]]
   for = "/index.html"
   [headers.values]

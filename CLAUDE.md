@@ -9,7 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 開発コマンド
 
 ```bash
-npm run dev          # Vite開発サーバー起動 (port 5173)
+npm run dev          # Vite (5173) + netlify functions:serve (8888) を concurrently で同時起動
+npm run dev:vite     # Vite 単体 (port 5173) — Functions 不要時
+npm run dev:fn       # netlify functions:serve 単体 (port 8888)
 npm run build        # TypeScriptチェック + Viteビルド (dist/へ出力)
 npm run lint         # ESLint実行
 npm run lint:fix     # ESLint自動修正
@@ -17,7 +19,9 @@ npm run format       # Prettier + ESLint自動整形
 npm run quality:check # tsc + eslint + prettier + build の一括チェック
 ```
 
-ローカルでNetlify Functions含めて動作確認する場合は `netlify dev` を使う（port 8888でプロキシ）。
+ローカル開発は **`npm run dev` のみ** で完結する（`netlify dev` は使わない — フレームワーク検査タイムアウトの再発防止）。
+Vite proxy が `/.netlify/functions/*` を `localhost:8888` (functions:serve) に流すので、ブラウザからは http://localhost:5173 一本でアクセスする。
+`predev` フックで起動前に 5173/8888 の orphan を自動 kill する。
 
 ## アーキテクチャ
 
