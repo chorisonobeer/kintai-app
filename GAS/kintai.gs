@@ -74,14 +74,27 @@ Kintai.handleSaveKintai = function(payload, token, debug, diagInfo) {
     return _err('必須パラメータが不足しています', debug, diagInfo);
   }
 
-  // 3. シート取得
+  // 3. シート取得 (年シート方式: シート名は西暦4桁文字列)
   var _tOpenStart = Date.now();
+  var saveYear = _yearFromDateLike(p.date);
+  if (!saveYear) {
+    diagInfo.sheetError = 'date から年を抽出できません: ' + p.date;
+    return _err('日付の年を取得できません', debug, diagInfo);
+  }
+  diagInfo.targetSheetName = String(saveYear);
   var sheet;
   try {
-    sheet = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName('データ');
+    sheet = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName(String(saveYear));
     if (!sheet) {
-      diagInfo.sheetError = 'データシートが見つかりません';
-      return _err('データシートが見つかりません', debug, diagInfo);
+      // フォールバック: 旧スキーマ (1 枚の「データ」シート) を一時的に許容
+      var legacy = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName('データ');
+      if (legacy) {
+        diagInfo.usedLegacyDataSheet = true;
+        sheet = legacy;
+      } else {
+        diagInfo.sheetError = saveYear + ' シートが見つかりません';
+        return _err(saveYear + ' 年のシートが未準備です。管理者にご連絡ください。', debug, diagInfo);
+      }
     }
   } catch (e) {
     diagInfo.sheetError = String(e);
@@ -211,14 +224,26 @@ Kintai.handleGetMonthlyData = function(payload, token, debug, diagInfo) {
   }
   diagInfo.cacheHit = false;
 
-  // 4. シート取得
+  // 4. シート取得 (年シート方式: シート名 = String(p.year))
   var _tOpenStart = Date.now();
+  diagInfo.targetSheetName = String(p.year);
   var sheet;
   try {
-    sheet = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName('データ');
+    sheet = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName(String(p.year));
     if (!sheet) {
-      diagInfo.sheetError = 'データシートが見つかりません';
-      return _err('データシートが見つかりません', debug, diagInfo);
+      // フォールバック: 旧スキーマ (1枚の「データ」シート) を許容
+      var legacy = SpreadsheetApp.openById(p.spreadsheetId).getSheetByName('データ');
+      if (legacy) {
+        diagInfo.usedLegacyDataSheet = true;
+        sheet = legacy;
+      } else {
+        // 当年シート未準備 = 空配列を返す（アプリ側はデータ無し扱い）
+        diagInfo.sheetError = p.year + ' シートが見つかりません (空として返却)';
+        var emptyData = [];
+        try { cache.put(ck, JSON.stringify(emptyData), MONTHLY_CACHE_TTL_SEC); } catch (_) {}
+        diagInfo.timings.tTotal = Date.now() - _t0;
+        return Utils.createResponse({ ok: true, data: emptyData, debug: debug ? diagInfo : undefined });
+      }
     }
   } catch (e) {
     diagInfo.sheetError = String(e);
@@ -444,6 +469,22 @@ function _calculateSalary(tasks) {
 }
 
 // ── 日付ユーティリティ ───────────────────────────────────────────────
+
+/** 日付風入力（Date / "YYYY/MM/DD" / "YYYY-MM-DD" / "YYYY年M月D日..."）から年を抽出 */
+function _yearFromDateLike(val) {
+  if (val instanceof Date) return val.getFullYear();
+  if (typeof val === 'string' && val) {
+    var m = val.match(/(\d{4})/);
+    if (m) return parseInt(m[1], 10);
+  }
+  if (typeof val === 'number') {
+    // Sheets シリアル日付: 1899-12-30 起点
+    var base = new Date(1899, 11, 30);
+    var d = new Date(base.getTime() + val * 86400000);
+    return d.getFullYear();
+  }
+  return null;
+}
 
 function _normalizeDate(dateStr) {
   if (dateStr instanceof Date) {
