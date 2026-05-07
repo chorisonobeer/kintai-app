@@ -215,19 +215,25 @@ const KintaiForm: React.FC = () => {
   }, [startTime, endTime, breakTime]);
 
   // 作業一覧（時給設定シート由来）— マウント時に即ロード。
-  // 遅延ロードだとドロップダウンが空のまま開いてフォールバックが見えてしまうため、
-  // 認証済みになった瞬間に取得してハードコードリストを表示させない。
+  // 初回は forceRefresh: true で GAS / フロント両方のキャッシュを無視し、
+  // スプレッドシート「時給設定」シートを必ず再読込する。
+  // 過去の空キャッシュ残留事故（30 分間ずっと空が返る）の再発防止策。
   const jobOptionsLoadedRef = useRef(false);
   const [jobOptionsLoading, setJobOptionsLoading] = useState(false);
-  const loadJobOptions = async () => {
-    if (jobOptionsLoadedRef.current) return;
+  const loadJobOptions = async (forceRefresh = false) => {
+    if (!forceRefresh && jobOptionsLoadedRef.current) return;
     jobOptionsLoadedRef.current = true;
     setJobOptionsLoading(true);
     try {
-      const list = await getJobWageOptions();
+      const list = await getJobWageOptions({ forceRefresh });
       setJobOptions(list);
-    } catch {
+      // 取得失敗・空配列は console にだけ落とす（UI には出さない）
+      if (list.length === 0) {
+        console.warn("[KintaiForm] 時給マスタが空配列です。スプレッドシートのシート名/データを確認してください。");
+      }
+    } catch (e) {
       jobOptionsLoadedRef.current = false;
+      console.error("[KintaiForm] loadJobOptions failed:", e);
     } finally {
       setJobOptionsLoading(false);
     }
@@ -235,7 +241,8 @@ const KintaiForm: React.FC = () => {
 
   useEffect(() => {
     if (!isAuthenticated()) return;
-    loadJobOptions();
+    // 初回は強制再取得（GAS の空キャッシュ事故の救済も兼ねる）
+    loadJobOptions(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -673,8 +680,8 @@ const KintaiForm: React.FC = () => {
               <TaskJobSelect
                 value={task.job}
                 onChange={(e) => handleTaskJobChange(index, e.target.value)}
-                onFocus={loadJobOptions}
-                onMouseDown={loadJobOptions}
+                onFocus={() => loadJobOptions()}
+                onMouseDown={() => loadJobOptions()}
                 disabled={fieldsDisabled}
                 $empty={!task.job}
                 aria-label="作業内容"
@@ -720,8 +727,8 @@ const KintaiForm: React.FC = () => {
             <TaskAddBtn
               type="button"
               onClick={handleAddTask}
-              onMouseEnter={loadJobOptions}
-              onTouchStart={loadJobOptions}
+              onMouseEnter={() => loadJobOptions()}
+              onTouchStart={() => loadJobOptions()}
             >
               <PlusIcon strokeWidth={2.4} />
               <span>作業を追加</span>
