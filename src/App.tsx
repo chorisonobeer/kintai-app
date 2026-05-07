@@ -116,9 +116,28 @@ const App: React.FC = () => {
     if ("serviceWorker" in navigator) {
       try {
         performance.mark("PWA:sw-register-start");
-        // SW 登録
-        const registration = await navigator.serviceWorker.register("/sw.js");
+        // updateViaCache: 'none' = SW スクリプト自体を毎回ネットワーク fetch。
+        // iOS Safari PWA で /sw.js が HTTP キャッシュから返って更新が保留される
+        // 事故を防ぐ。
+        const registration = await navigator.serviceWorker.register("/sw.js", {
+          updateViaCache: "none",
+        });
         performance.mark("PWA:sw-registered");
+
+        // 起動時に SW の更新チェックを明示要求（iOS PWA 24h 遅延対策）
+        try {
+          await registration.update();
+        } catch {
+          // update 失敗は無視（既に最新の場合や一時的なネットワーク失敗）
+        }
+
+        // 新 SW が controlling に切り替わったら自動 reload。
+        // ハッシュ付き bundle が古いまま動き続けるのを防ぐ最後の砦。
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (window.__kintaiReloading) return;
+          window.__kintaiReloading = true;
+          window.location.reload();
+        });
 
         // メッセージ受信リスナー
         navigator.serviceWorker.addEventListener(
