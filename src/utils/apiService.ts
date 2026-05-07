@@ -233,6 +233,11 @@ export async function login(
     // セッションキャッシュもクリア
     sessionStorage.removeItem(MONTHLY_DATA_KEY);
     sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
+    // 時給マスタキャッシュもクリア（旧 CSV 経路と新 GAS 経路の両方）
+    sessionStorage.removeItem("job_wage_options");
+    sessionStorage.removeItem("job_wage_options_ts");
+    sessionStorage.removeItem("job_wage_options_v2");
+    sessionStorage.removeItem("job_wage_options_v2_ts");
     clearMonthlyDataCache();
 
     // 既存データクリア完了
