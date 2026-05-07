@@ -54,6 +54,25 @@ try {
   console.error(`Failed to bump CACHE_NAME:`, err);
 }
 
+// index.html の <meta name="build-time" content="..."> をビルドごとに更新
+// （version.json の buildTime とクライアント側で突合してリロード判定する）
+const indexHtmlPath = path.join(__dirname, '..', 'index.html');
+try {
+  let htmlContent = fs.readFileSync(indexHtmlPath, 'utf-8');
+  const replaced = htmlContent.replace(
+    /<meta\s+name=["']build-time["']\s+content=["'][^"']*["']\s*\/?>/,
+    `<meta name="build-time" content="${buildTime}">`,
+  );
+  if (replaced !== htmlContent) {
+    fs.writeFileSync(indexHtmlPath, replaced);
+    console.log(`index.html build-time updated to: ${buildTime}`);
+  } else {
+    console.warn(`build-time meta tag not found in index.html`);
+  }
+} catch (err) {
+  console.error(`Failed to update index.html build-time:`, err);
+}
+
 console.log(`Build time set to: ${buildTime}`);
 console.log(`Environment file created at: ${envPath}`);
 console.log(`Version JSON written to: ${versionJsonPath}`);

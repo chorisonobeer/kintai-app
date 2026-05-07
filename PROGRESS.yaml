@@ -2,14 +2,12 @@ project: kintai-app
 updated: "2026-05-07"
 
 current:
-  branch: fix/gas-aggregation-yearsheet
-  goal: 日次入力フォームの「作業を選択」リスト古いまま問題の緊急修正
-  status: in_progress
-  done: "ハードコードフォールバック削除/マウント時即ロード/login時キャッシュクリア追加 (KintaiForm.tsx, apiService.ts)"
-  pending:
-    - 実機検証（時給設定シートに登録した作業名が「作業を選択」プルダウンに表示されるか）
-    - 検証OKならコミット & main マージ
-  context: "原因: jobOptions空配列→onMouseDown時に非同期fetchするがドロップダウンは即座に開く→ハードコード(田んぼ/柿農園/事務所/その他)が見えていた。GAS側 handleGetJobWageOptions は実装済み、フロント側のレンダリング順序の問題。"
+  branch: main
+  goal: 待機中
+  status: idle
+  done: ""
+  pending: []
+  context: ""
 
 next:
   - 給与計算機能の UI 表示（getMonthlyData の読込範囲を A-I に拡張、I 列を返す）
@@ -17,8 +15,8 @@ next:
   - Phase B: Service Worker Background Sync 統合（PWA オフライン対応強化）
 
 history:
+  - "2026-05-07 時給マスタ取得堅牢化（forceRefresh+空キャッシュ救済、a4668ce）+ 作業選択プルダウン緊急修正（050e200）"
   - "2026-05-07 集計ビュー全面修復+年シート方式刷新（個人SS YYYYシート分離、IFERROR/QUERY型強制、集計シートクローン、労働実績フィルタ）"
   - "2026-05-07 日次入力フォーム UI 全面再設計（styled-components / 100dvh 1画面収納 / clamp+dvh / グラデ廃止 / 絵文字→SVG / 長押し維持）"
   - "2026-05-07 GAS 高速化(A+C+D)+I列給与計算(F)+時給マスタAPI(E)+楽観的更新+Toast+Login UI 刷新"
   - "2026-05-06 認証脱 GAS 化（auth-login Function + HMAC token）+ saveKintai 引数バグ修正 + URL 一元化"
-  - "2026-03-26 GAS 修正・最適化・読書時間短縮効率化（commit ded047c）"
