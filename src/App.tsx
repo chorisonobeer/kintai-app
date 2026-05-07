@@ -56,12 +56,60 @@ const App: React.FC = () => {
       // localStorage エラーは無視
     }
 
+    // 起動時の強制バージョン同期: HTML 埋め込みの build-time と
+    // サーバー最新 version.json の buildTime を比較し、ずれていれば
+    // SW キャッシュ全削除 + リロード（PWA は常に最新で起動）。
+    // 一致時は何もしない（無限リロード防止）。
+    forceLatestOnLaunch();
+
     // Service Workerの登録とバックグラウンド同期の初期化
     initializeServiceWorker();
 
     // v12 楽観的更新: 起動時に pending queue を flush + online listener 登録
     initPendingSaveQueue();
   }, []);
+
+  // 起動時バージョン同期: HTML meta build-time と server version.json を突合。
+  // 不一致 = 古い HTML/JS で起動している → キャッシュ全削除 + reload。
+  // 一致 = 既に最新 → 何もせず通常起動。
+  const forceLatestOnLaunch = async () => {
+    try {
+      const meta = document.querySelector('meta[name="build-time"]');
+      const htmlBuildTime = meta?.getAttribute("content") || "";
+      const res = await fetch("/version.json?t=" + Date.now(), {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { buildTime?: string };
+      const serverBuildTime = data?.buildTime || "";
+      if (!htmlBuildTime || !serverBuildTime) return;
+      if (htmlBuildTime === serverBuildTime) return;
+
+      // 不一致: 古い HTML/JS が動いている。SW キャッシュ全削除 + 強制リロード。
+      try {
+        if ("caches" in window) {
+          const names = await caches.keys();
+          await Promise.all(
+            names
+              .filter((n) => n.startsWith("kintai-app-"))
+              .map((n) => caches.delete(n)),
+          );
+        }
+      } catch {
+        // キャッシュ削除失敗は無視（reload で次回再取得される）
+      }
+      if (!window.__kintaiReloading) {
+        window.__kintaiReloading = true;
+        window.location.reload();
+      }
+    } catch {
+      // ネットワーク失敗時は通常起動
+    }
+  };
 
   // Service Worker初期化処理
   const initializeServiceWorker = async () => {
@@ -156,15 +204,21 @@ const App: React.FC = () => {
       }
 
       case "UPDATE_APPLIED":
-        // 更新適用完了: 現在のセッションはそのまま継続（ハッシュ付きアセットなので無害）
-        // 新バージョンは次回起動時に自然適用される（HTMLは毎回ネットワーク優先 = no-cache ヘッダー）
-        // フルリロード（window.location.reload）は廃止: 作業中断とキャッシュ再取得による遅延を回避
-        setShowVersionCheckModal(false);
+        // 更新適用完了: 起動時に必ず最新版で動かすため即時リロード。
+        // CHECK_FOR_UPDATES は initializeServiceWorker から起動時に1回だけ送信されるため、
+        // この時点では作業データはまだ無く、リロードによる作業中断リスクはない。
         try {
-          // 次回起動時に軽量通知を出すためのフラグ
           localStorage.setItem("kintai_updated_at", String(Date.now()));
         } catch {
           // localStorage 書き込み失敗は無視
+        }
+        // モーダルは reload で消える。reload を二重発火させない最小ガード。
+        if (!window.__kintaiReloading) {
+          window.__kintaiReloading = true;
+          // 念のため SW に切替指示が伝わってから reload するため microtask 1 つ挟む
+          Promise.resolve().then(() => {
+            window.location.reload();
+          });
         }
         break;
 
