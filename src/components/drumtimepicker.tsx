@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { ClockIcon, CloseIcon } from "./Icons";
 import "./drumtimepicker.css";
 
 interface DrumTimePickerProps {
@@ -6,6 +7,10 @@ interface DrumTimePickerProps {
   value: string; // "HH:mm" format
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** 休憩用: 時 0..3, 分 0/15/30/45 のみ */
+  breakMode?: boolean;
+  /** 表示プレースホルダ（valueが空のとき） */
+  placeholder?: string;
 }
 
 interface DrumPickerItemProps {
@@ -146,6 +151,8 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
   value,
   onChange,
   disabled = false,
+  breakMode = false,
+  placeholder,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   // draft選択値（モーダル内専用）
@@ -154,12 +161,12 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
   // 表示用の現在値（親から渡される）
 
   // Generate options
-  const hourOptions = Array.from({ length: 24 }, (_, i) =>
-    String(i).padStart(2, "0"),
-  );
-  const minuteOptions = Array.from({ length: 12 }, (_, i) =>
-    String(i * 5).padStart(2, "0"),
-  );
+  const hourOptions = breakMode
+    ? Array.from({ length: 4 }, (_, i) => String(i).padStart(2, "0"))
+    : Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minuteOptions = breakMode
+    ? ["00", "15", "30", "45"]
+    : Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
 
   // 初期値の設定はhandleOpenでモーダル表示前に同期的に行う
 
@@ -184,6 +191,9 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
       const [vh, vm] = parseHHmm(value);
       setDraftHour(vh);
       setDraftMinute(vm);
+    } else if (breakMode) {
+      setDraftHour("01");
+      setDraftMinute("00");
     } else if (label.includes("出勤")) {
       setDraftHour("08");
       setDraftMinute("00");
@@ -198,18 +208,24 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
     setIsOpen(true);
   };
 
+  const displayPlaceholder = placeholder ?? (breakMode ? "未設定" : "未入力");
+
   return (
     <div className="drum-time-picker">
       <label className="drum-time-picker-label">{label}</label>
       <button
-        className={`drum-time-picker-button ${disabled ? "disabled" : ""}`}
+        className={`drum-time-picker-button ${disabled ? "disabled" : ""} ${!value ? "is-empty" : ""}`}
         onClick={handleOpen}
         disabled={disabled}
+        aria-label={label}
+        type="button"
       >
         <span className="drum-time-picker-value">
-          {value || "未入力 / Not entered"}
+          {value || displayPlaceholder}
         </span>
-        <span className="drum-time-picker-icon">🕐</span>
+        <span className="drum-time-picker-icon" aria-hidden="true">
+          <ClockIcon strokeWidth={1.6} />
+        </span>
       </button>
 
       {isOpen && (
@@ -220,14 +236,16 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
               <button
                 className="drum-time-picker-close"
                 onClick={() => setIsOpen(false)}
+                aria-label="閉じる"
+                type="button"
               >
-                ✕
+                <CloseIcon strokeWidth={2} />
               </button>
             </div>
             <div className="drum-time-picker-content">
               <div className="drum-time-picker-drums">
                 <div className="drum-time-picker-column">
-                  <div className="drum-time-picker-column-label">時 / Hour</div>
+                  <div className="drum-time-picker-column-label">時</div>
                   <DrumPickerItem
                     options={hourOptions}
                     value={draftHour}
@@ -237,9 +255,7 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
                 </div>
                 <div className="drum-time-picker-separator">:</div>
                 <div className="drum-time-picker-column">
-                  <div className="drum-time-picker-column-label">
-                    分 / Minute
-                  </div>
+                  <div className="drum-time-picker-column-label">分</div>
                   <DrumPickerItem
                     options={minuteOptions}
                     value={draftMinute}
@@ -256,8 +272,9 @@ const DrumTimePicker: React.FC<DrumTimePickerProps> = ({
                   onChange(`${draftHour}:${draftMinute}`);
                   setIsOpen(false);
                 }}
+                type="button"
               >
-                確定 / Confirm
+                確定
               </button>
             </div>
           </div>

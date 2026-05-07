@@ -53,7 +53,7 @@ export default defineConfig(() => {
     },
     server: {
       port: 5173,
-      host: true,
+      host: "127.0.0.1",
       proxy: {
         // Netlify Functions用のプロキシ（dev で localhost:8888 経由）
         // GAS は kintai-api Function の中から直接呼び出すので、ここで GAS URL は持たない

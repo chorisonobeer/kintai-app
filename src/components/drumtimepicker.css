@@ -1,96 +1,146 @@
 /**
- * /src/components/DrumTimePicker.css
- * 2025-01-20T10:00+09:00
- * 変更概要: 新規追加 - ドラム型時間ピッカーのスタイル
+ * /src/components/drumtimepicker.css
+ * 寸法は全て clamp(下限px, Ndvh/dvw, 上限px) 形式（pt/px生指定禁止）
+ * スマホ縦持ち専用 (横向き・iPad対応外)
  */
 
+/* ──────────── ボタン部分（フォーム1画面に組み込み） ──────────── */
 .drum-time-picker {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: clamp(8px, 1.4dvh, 14px);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .drum-time-picker-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 4px;
+  flex: 0 0 auto;
+  font-size: clamp(11px, 1.7dvh, 13px);
+  font-weight: 600;
+  color: #334155;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .drum-time-picker-button {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  background-color: var(--card-bg);
-  border: 2px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 16px;
-  color: var(--text-primary);
+  gap: clamp(6px, 1dvh, 10px);
+  height: clamp(40px, 6dvh, 56px);
+  padding: 0 clamp(10px, 1.8dvh, 16px);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: clamp(8px, 1.4dvh, 12px);
+  font-family: inherit;
+  font-size: clamp(15px, 2.4dvh, 18px);
+  color: #0f172a;
   cursor: pointer;
-  transition: all 0.2s ease;
-  min-height: 48px;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  letter-spacing: -0.005em;
 }
 
 .drum-time-picker-button:hover:not(.disabled) {
-  border-color: var(--primary-color);
-  box-shadow: 0 2px 8px rgba(61, 90, 254, 0.15);
+  border-color: #3730a3;
+  background: #ffffff;
 }
 
 .drum-time-picker-button:active:not(.disabled) {
-  transform: translateY(1px);
+  background: #f1f5f9;
 }
 
 .drum-time-picker-button.disabled {
-  background-color: var(--picker-bg);
-  color: var(--text-secondary);
+  background: #f1f5f9;
+  color: #94a3b8;
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.65;
+  border-color: #e2e8f0;
+}
+
+.drum-time-picker-button.is-empty {
+  border-color: #fb7185;
+  background: #fff1f2;
+}
+
+.drum-time-picker-button.is-empty .drum-time-picker-value {
+  color: #9f1239;
 }
 
 .drum-time-picker-value {
-  font-weight: 600;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: clamp(16px, 2.6dvh, 20px);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .drum-time-picker-icon {
-  font-size: 16px;
-  opacity: 0.7;
-}
-
-.drum-time-picker-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: clamp(15px, 2.2dvh, 18px);
+  height: clamp(15px, 2.2dvh, 18px);
+  color: #94a3b8;
+}
+
+.drum-time-picker-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ──────────── オーバーレイ・モーダル（画面外OK） ──────────── */
+.drum-time-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 0;
+  animation: drumOverlayFadeIn 0.2s ease-out;
+}
+
+@keyframes drumOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .drum-time-picker-modal {
-  background-color: var(--card-bg);
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+  border-radius: clamp(14px, 2.4dvh, 20px) clamp(14px, 2.4dvh, 20px) 0 0;
+  border-top: 1px solid #e2e8f0;
+  box-shadow: 0 -clamp(2px, 0.4dvh, 4px) clamp(12px, 2.4dvh, 22px)
+    rgba(15, 23, 42, 0.12);
   width: 100%;
-  max-width: 400px;
-  max-height: 80vh;
+  max-width: 100vw;
+  max-height: 75dvh;
   overflow: hidden;
-  animation: drumModalSlideUp 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  animation: drumModalSlideUp 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
 @keyframes drumModalSlideUp {
   from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(100%);
   }
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -98,71 +148,91 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid var(--border-color);
+  padding: clamp(12px, 2dvh, 18px) clamp(16px, 2.6dvh, 22px);
+  border-bottom: 1px solid #e2e8f0;
+  flex: 0 0 auto;
 }
 
 .drum-time-picker-header h3 {
-  font-size: 18px;
+  font-size: clamp(15px, 2.3dvh, 18px);
   font-weight: 600;
-  color: var(--text-primary);
+  color: #0f172a;
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .drum-time-picker-close {
   background: none;
   border: none;
-  font-size: 20px;
-  color: var(--text-secondary);
+  color: #64748b;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  width: clamp(32px, 5dvh, 44px);
+  height: clamp(32px, 5dvh, 44px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.drum-time-picker-close svg {
+  width: clamp(16px, 2.4dvh, 20px);
+  height: clamp(16px, 2.4dvh, 20px);
 }
 
 .drum-time-picker-close:hover {
-  background-color: var(--picker-bg);
-  color: var(--text-primary);
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .drum-time-picker-content {
-  padding: 24px;
+  flex: 1 1 auto;
+  padding: clamp(14px, 2.4dvh, 22px) clamp(16px, 2.6dvh, 24px);
+  overflow: hidden;
+  min-height: 0;
 }
 
 .drum-time-picker-drums {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: 16px;
+  gap: clamp(10px, 2dvh, 18px);
+  height: 100%;
 }
 
 .drum-time-picker-column {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .drum-time-picker-column-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
+  font-size: clamp(11px, 1.7dvh, 13px);
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: clamp(8px, 1.4dvh, 12px);
+  letter-spacing: 0;
 }
 
 .drum-time-picker-separator {
-  font-size: 24px;
-  font-weight: bold;
-  color: var(--text-primary);
-  margin: 0 8px;
-  align-self: center;
-  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(20px, 3dvh, 26px);
+  font-weight: 700;
+  color: #475569;
+  padding-top: clamp(20px, 3.4dvh, 30px);
 }
 
+/* ──────────── ドラムスクローラー ──────────── */
 .drum-picker-item {
   position: relative;
-  width: 80px;
-  height: 200px;
+  width: 100%;
+  max-width: clamp(80px, 14dvh, 110px);
+  height: clamp(170px, 30dvh, 240px);
 }
 
 .drum-picker-highlight {
@@ -170,11 +240,11 @@
   top: 50%;
   left: 0;
   right: 0;
-  height: 50px;
+  height: clamp(40px, 6.5dvh, 54px);
   transform: translateY(-50%);
-  background-color: var(--primary-color);
-  opacity: 0.1;
-  border-radius: 8px;
+  background: rgba(55, 48, 163, 0.08);
+  border-top: 1px solid rgba(55, 48, 163, 0.2);
+  border-bottom: 1px solid rgba(55, 48, 163, 0.2);
   z-index: 1;
   pointer-events: none;
 }
@@ -208,136 +278,79 @@
 }
 
 .drum-picker-padding {
-  height: 75px;
+  /* 高さの半分（ハイライト中央寄せのため） */
+  height: calc((clamp(170px, 30dvh, 240px) - clamp(40px, 6.5dvh, 54px)) / 2);
   flex-shrink: 0;
 }
 
 .drum-picker-option {
-  height: 50px;
+  height: clamp(40px, 6.5dvh, 54px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: clamp(16px, 2.5dvh, 20px);
   font-weight: 500;
-  color: var(--text-secondary);
+  color: #94a3b8;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 6px;
-  margin: 0 4px;
+  transition:
+    color 0.18s,
+    font-weight 0.18s,
+    transform 0.18s;
   position: relative;
   z-index: 2;
   user-select: none;
   scroll-snap-align: center;
-}
-
-.drum-picker-option:hover {
-  background-color: var(--picker-bg);
-  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .drum-picker-option.selected {
-  color: var(--primary-color);
+  color: #312e81;
   font-weight: 700;
-  font-size: 20px;
+  font-size: clamp(18px, 2.8dvh, 22px);
 }
 
+/* ──────────── フッター・確定ボタン ──────────── */
 .drum-time-picker-footer {
-  padding: 16px 24px 24px;
-  border-top: 1px solid var(--border-color);
+  padding: clamp(12px, 2dvh, 18px) clamp(16px, 2.6dvh, 22px)
+    calc(clamp(12px, 2dvh, 18px) + env(safe-area-inset-bottom));
+  border-top: 1px solid #e2e8f0;
+  flex: 0 0 auto;
 }
 
 .drum-time-picker-confirm {
   width: 100%;
-  padding: 12px 24px;
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
+  height: clamp(44px, 6.5dvh, 56px);
+  background: #3730a3;
+  color: #ffffff;
+  border: 1px solid #3730a3;
+  border-radius: clamp(8px, 1.4dvh, 12px);
+  font-family: inherit;
+  font-size: clamp(15px, 2.3dvh, 18px);
   font-weight: 600;
+  letter-spacing: 0;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    transform 0.08s,
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .drum-time-picker-confirm:hover {
-  background-color: var(--header-color);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(61, 90, 254, 0.3);
+  background: #312e81;
+  border-color: #312e81;
 }
 
 .drum-time-picker-confirm:active {
-  transform: translateY(0);
+  transform: translateY(1px);
 }
 
-/* Mobile optimizations */
-@media (max-width: 768px) {
-  .drum-time-picker-modal {
-    margin: 0;
-    border-radius: 16px 16px 0 0;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    max-width: none;
-    animation: drumModalSlideUpMobile 0.3s ease-out;
-  }
-
-  @keyframes drumModalSlideUpMobile {
-    from {
-      transform: translateY(100%);
-    }
-    to {
-      transform: translateY(0);
-    }
-  }
-
-  .drum-time-picker-drums {
-    gap: 20px;
-  }
-
-  .drum-picker-item {
-    width: 90px;
-  }
-
-  .drum-picker-option {
-    font-size: 20px;
-    height: 55px;
-  }
-
-  .drum-picker-option.selected {
-    font-size: 22px;
-  }
-
-  .drum-time-picker-button {
-    min-height: 52px;
-    font-size: 18px;
-  }
-
-  .drum-time-picker-value {
-    font-size: 16px;
-  }
-}
-
-/* Touch improvements */
+/* タッチ環境でホバー打ち消し */
 @media (hover: none) and (pointer: coarse) {
-  .drum-picker-option:hover {
-    background-color: transparent;
-    color: var(--text-secondary);
-  }
-
   .drum-time-picker-button:hover:not(.disabled) {
-    border-color: var(--border-color);
-    box-shadow: none;
+    border-color: #e2e8f0;
+    background: #f8fafc;
   }
-
   .drum-time-picker-close:hover {
-    background-color: transparent;
-    color: var(--text-secondary);
-  }
-
-  .drum-time-picker-confirm:hover {
-    background-color: var(--primary-color);
-    transform: none;
-    box-shadow: none;
+    background: transparent;
   }
 }
