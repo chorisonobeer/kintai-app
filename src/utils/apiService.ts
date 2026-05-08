@@ -55,6 +55,62 @@ interface ApiErr {
 
 type ApiResp<T = unknown> = ApiOk<T> | ApiErr;
 
+/**
+ * 認証エラー専用例外。callGAS が GAS / Netlify Function から
+ * 「トークンが無効」「認証エラー」等を受け取った時に throw する。
+ *
+ * 個別 API の catch 節では再 throw され、グローバルハンドラ
+ * (handleAuthenticationError) で localStorage クリア + /login 遷移が行われる。
+ *
+ * これにより I2 不変条件「API 認証エラー時に必ず logout + /login 遷移」が成立。
+ */
+export class AuthenticationError extends Error {
+  constructor(message = "認証セッションが無効です") {
+    super(message);
+    this.name = "AuthenticationError";
+  }
+}
+
+/**
+ * 認証エラー時の単一処理ポイント。localStorage を掃除して /login へ強制遷移。
+ * 二重発火防止のため module-level フラグで guard する。
+ */
+let authErrorHandled = false;
+function handleAuthenticationError(): void {
+  if (authErrorHandled) return;
+  authErrorHandled = true;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_ID_KEY);
+    localStorage.removeItem(USER_NAME_KEY);
+    localStorage.removeItem(SHEET_ID_KEY);
+    sessionStorage.removeItem(MONTHLY_DATA_KEY);
+    sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
+    sessionStorage.removeItem("job_wage_options_v2");
+    sessionStorage.removeItem("job_wage_options_v2_ts");
+  } catch {
+    // ignore
+  }
+  // SPA 内の遷移ではなく強制リロードで /login へ。
+  // SPA 状態（メモリ上のキャッシュ等）を完全リセットしたいので reload を選択。
+  if (typeof window !== "undefined") {
+    window.location.replace("/login");
+  }
+}
+
+/**
+ * GAS / Netlify Function のエラーメッセージから「認証関連エラー」を判定。
+ */
+function isAuthErrorMessage(msg: string): boolean {
+  if (!msg) return false;
+  return (
+    msg.indexOf("トークン") >= 0 ||
+    msg.indexOf("認証") >= 0 ||
+    msg.indexOf("token") >= 0 ||
+    msg.toLowerCase().indexOf("unauthorized") >= 0
+  );
+}
+
 /* ========= バージョン関連型 ========= */
 export interface VersionInfo {
   version: string;
@@ -190,12 +246,20 @@ async function callGAS<T = unknown>(
       const okFlag =
         (json as ApiOk<T>).success === true || (json as ApiOk<T>).ok === true;
       if (!okFlag) {
-        const msg =
-          typeof (json as ApiErr).error === "string"
-            ? (json as ApiErr).error
-            : typeof (json as ApiErr).err === "string"
-              ? (json as ApiErr).err
+        const errField = (json as ApiErr).error;
+        const errField2 = (json as ApiErr).err;
+        const msg: string =
+          typeof errField === "string"
+            ? errField
+            : typeof errField2 === "string"
+              ? errField2
               : "API error";
+        // 認証エラーは AuthenticationError として throw して
+        // グローバルに localStorage クリア + /login 遷移させる
+        if (isAuthErrorMessage(msg)) {
+          handleAuthenticationError();
+          throw new AuthenticationError(msg);
+        }
         throw new Error(msg);
       }
 
@@ -1047,83 +1111,69 @@ export function clearMonthlyDataCache(): void {
  *      API 失敗時は前回キャッシュを TTL 切れでも返す（UX 維持）。
  *      キャッシュキーは _v2 サフィックスで旧 CSV キャッシュ（job_wage_options）と分離。
  */
+/**
+ * 時給マスタを取得する。
+ *
+ * 設計方針 (I3, I5):
+ *  - 認証エラーは AuthenticationError として上位に伝播（callGAS が throw）
+ *  - 通信エラー / HTTP エラー / GAS エラーはそのまま throw（呼び出し側で再読込 UI）
+ *  - 空配列はキャッシュしない & 空配列を捻じ込んで返さない
+ *  - キャッシュは sessionStorage 1 層、TTL 5 分
+ *  - forceRefresh: true でキャッシュ無視 + GAS 側にも forceRefresh フラグ送信
+ */
 export async function getJobWageOptions(
   options?: { forceRefresh?: boolean },
 ): Promise<Array<{ job: string; wage: number | null }>> {
   const cacheKey = "job_wage_options_v2";
   const tsKey = "job_wage_options_v2_ts";
-  const ttlMs = 30 * 60 * 1000; // 30分
+  const ttlMs = 5 * 60 * 1000; // 5分
   const forceRefresh = !!options?.forceRefresh;
 
-  // 旧キャッシュを起動時に掃除（残存していると別経路で誤参照される可能性を排除）
+  // 旧キャッシュキー（CSV 経路）を念のため掃除
   try {
     sessionStorage.removeItem("job_wage_options");
     sessionStorage.removeItem("job_wage_options_ts");
   } catch {}
 
-  const readCache = (): Array<{ job: string; wage: number | null }> | null => {
-    try {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (!cached) return null;
-      return JSON.parse(cached) as Array<{
-        job: string;
-        wage: number | null;
-      }>;
-    } catch {
-      return null;
-    }
-  };
-
-  // 鮮度内キャッシュなら即返却（ただし空配列は無視 = 再取得）
-  if (!forceRefresh) {
-    try {
-      const tsRaw = sessionStorage.getItem(tsKey);
-      if (tsRaw) {
-        const ts = parseInt(tsRaw, 10);
-        if (!Number.isNaN(ts) && Date.now() - ts < ttlMs) {
-          const fresh = readCache();
-          if (fresh && fresh.length > 0) return fresh;
-        }
-      }
-    } catch {}
-  } else {
-    // 強制再取得時は古いキャッシュを明示的に削除
+  if (forceRefresh) {
     try {
       sessionStorage.removeItem(cacheKey);
       sessionStorage.removeItem(tsKey);
     } catch {}
+  } else {
+    // 鮮度内キャッシュなら即返却（空配列は無視）
+    try {
+      const tsRaw = sessionStorage.getItem(tsKey);
+      const cached = sessionStorage.getItem(cacheKey);
+      if (tsRaw && cached) {
+        const ts = parseInt(tsRaw, 10);
+        if (!Number.isNaN(ts) && Date.now() - ts < ttlMs) {
+          const parsed = JSON.parse(cached) as Array<{
+            job: string;
+            wage: number | null;
+          }>;
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch {}
   }
 
-  try {
-    const r = await callGAS<Array<{ job: string; wage: number | null }>>(
-      "getJobWageOptions",
-      forceRefresh ? { forceRefresh: true } : {},
-      true,
-    );
-    const data = (r.data as Array<{ job: string; wage: number | null }>) || [];
+  // 失敗は throw。呼び出し側で再読込 UI を出す責務。
+  const r = await callGAS<Array<{ job: string; wage: number | null }>>(
+    "getJobWageOptions",
+    forceRefresh ? { forceRefresh: true } : {},
+    true,
+  );
+  const data = (r.data as Array<{ job: string; wage: number | null }>) || [];
 
-    // 空配列はキャッシュしない（次回再取得で回復させる）
-    if (data.length > 0) {
-      try {
-        sessionStorage.setItem(cacheKey, JSON.stringify(data));
-        sessionStorage.setItem(tsKey, String(Date.now()));
-      } catch {}
-    }
-
-    if (data.length === 0) {
-      console.warn(
-        "[getJobWageOptions] GAS から空配列が返却されました。時給設定シートの内容またはシート名（時給設定）を確認してください。debug:",
-        r.debug,
-      );
-    }
-
-    return data;
-  } catch (err) {
-    console.error("[getJobWageOptions] API 失敗:", err);
-    // API 失敗時は TTL 切れでもキャッシュを返す（空配列は除外）
-    const stale = readCache();
-    return stale && stale.length > 0 ? stale : [];
+  if (data.length > 0) {
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify(data));
+      sessionStorage.setItem(tsKey, String(Date.now()));
+    } catch {}
   }
+
+  return data;
 }
 // ISO日付文字列やDateオブジェクトから "HH:mm" 形式を抽出するヘルパー
 function extractHHMM(timeValue: string | Date | undefined): string {
@@ -1265,25 +1315,84 @@ function formatDateForComparison(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/* ========= ユーティリティ (isAuthenticated などはこちらに既に定義があります) ========= */
+/* ========= ユーティリティ ========= */
+
+/**
+ * token payload を base64url decode して返す。失敗時は null。
+ */
+function decodeTokenPayload(
+  token: string,
+): { sub?: string; name?: string; sid?: string; iat?: number; exp?: number } | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    let b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const json = atob(b64);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 認証済み判定。
+ * - localStorage に必要な4キーが揃っていること
+ * - token の payload.exp が未来時刻であること（期限切れは未認証扱い）
+ *
+ * 期限切れを検知した場合は localStorage を即座に掃除する（ステール状態を残さない）。
+ * これにより I1 不変条件「token 期限切れ時に保護ルートで /login 遷移」が成立する。
+ */
 export const isAuthenticated = (): boolean => {
   const token = localStorage.getItem(TOKEN_KEY);
   const userId = localStorage.getItem(USER_ID_KEY);
   const userName = localStorage.getItem(USER_NAME_KEY);
   const spreadsheetId = localStorage.getItem(SHEET_ID_KEY);
 
-  // 全ての必要な認証情報が存在するかチェック
-  const isValid =
-    token !== null &&
-    userId !== null &&
-    userName !== null &&
-    spreadsheetId !== null;
+  if (
+    token === null ||
+    userId === null ||
+    userName === null ||
+    spreadsheetId === null
+  ) {
+    return false;
+  }
 
-  // デバッグ: 認証状態を詳細ログ出力
-  // 認証状態チェック
+  const payload = decodeTokenPayload(token);
+  if (!payload || typeof payload.exp !== "number") {
+    // payload 不正 → 認証情報をクリーンアップ
+    clearAuthStorage();
+    return false;
+  }
 
-  return isValid;
+  if (payload.exp <= Math.floor(Date.now() / 1000)) {
+    // 期限切れ → ステール認証情報を破棄
+    clearAuthStorage();
+    return false;
+  }
+
+  return true;
 };
+
+/**
+ * 認証関連の localStorage / sessionStorage を同期的にクリアする。
+ * logout() は async 版で GAS にも logout 通知を送るが、
+ * 期限切れ検知のような同期パスではこちらを使う。
+ */
+function clearAuthStorage(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_ID_KEY);
+    localStorage.removeItem(USER_NAME_KEY);
+    localStorage.removeItem(SHEET_ID_KEY);
+    sessionStorage.removeItem(MONTHLY_DATA_KEY);
+    sessionStorage.removeItem(MONTHLY_DATA_TIMESTAMP_KEY);
+    sessionStorage.removeItem("job_wage_options_v2");
+    sessionStorage.removeItem("job_wage_options_v2_ts");
+  } catch {
+    // ignore
+  }
+}
 
 export const getUserName = (): string | null =>
   localStorage.getItem(USER_NAME_KEY);

@@ -29,8 +29,11 @@ const AUTH_SECRET = process.env.NETLIFY_AUTH_SECRET;
 
 // Netlify Free 上限 10s。Sheets fetch を 7.5s で abort
 const SHEETS_FETCH_TIMEOUT_MS = 7_500;
-// トークン有効期限 8 時間
-const TOKEN_TTL_SEC = 8 * 60 * 60;
+// トークン有効期限 1 年
+// 個人勤怠 PWA の運用実態を踏まえ、再ログイン頻度を最小化。
+// 期限切れ自体は client 側 isAuthenticated() の expiry チェックで /login 遷移するため
+// 「リスト空表示」「保存失敗」が UI 上で黙殺される経路は別途排除する。
+const TOKEN_TTL_SEC = 365 * 24 * 60 * 60;
 
 // 列インデックス (CSV 観察に基づく確定値)
 const COL = {
