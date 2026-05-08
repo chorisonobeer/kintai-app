@@ -34,7 +34,6 @@ import {
 import {
   enqueueSave,
   isAuthenticated,
-  getJobWageOptions,
   getKintaiDataFromMonthlyData,
 } from "../utils/apiService";
 import { useKintai } from "../contexts/KintaiContext";
@@ -178,6 +177,9 @@ const KintaiForm: React.FC = () => {
     currentMonth,
     setCurrentYear,
     setCurrentMonth,
+    jobOptions,
+    jobOptionsStatus,
+    reloadJobOptions,
   } = useKintai();
 
   useEffect(() => {
@@ -195,9 +197,6 @@ const KintaiForm: React.FC = () => {
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [workingTime, setWorkingTime] = useState("");
   const [errors, setErrors] = useState<ValidationErrors>({});
-  const [jobOptions, setJobOptions] = useState<
-    Array<{ job: string; wage: number | null }>
-  >([]);
 
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -214,43 +213,8 @@ const KintaiForm: React.FC = () => {
     setWorkingTime(calculateWorkingTime(startTime, endTime, breakTime));
   }, [startTime, endTime, breakTime]);
 
-  // 作業一覧（時給設定シート由来）の取得 state machine。
-  // - "loading"     : fetch 中
-  // - "ready"       : jobOptions に値あり (10件 or 空)
-  // - "needs_retry" : 通信エラー等で取得失敗 → ドロップダウンに「再読込」option を表示
-  // 認証エラーは getJobWageOptions / callGAS が AuthenticationError を throw し、
-  // グローバルハンドラで /login 強制遷移するため、ここに到達しない (I2 不変条件)。
-  type JobOptionsStatus = "loading" | "ready" | "needs_retry";
-  const [jobOptionsStatus, setJobOptionsStatus] =
-    useState<JobOptionsStatus>("loading");
-  const jobOptionsLoadedRef = useRef(false);
-
-  const loadJobOptions = async (forceRefresh = false) => {
-    if (!forceRefresh && jobOptionsLoadedRef.current) return;
-    jobOptionsLoadedRef.current = true;
-    setJobOptionsStatus("loading");
-    try {
-      const list = await getJobWageOptions({ forceRefresh });
-      setJobOptions(list);
-      setJobOptionsStatus("ready");
-      if (list.length === 0) {
-        console.warn(
-          "[KintaiForm] 時給マスタが空配列です。スプレッドシートのシート名/データを確認してください。",
-        );
-      }
-    } catch (e) {
-      jobOptionsLoadedRef.current = false;
-      setJobOptionsStatus("needs_retry");
-      console.error("[KintaiForm] loadJobOptions failed:", e);
-    }
-  };
-
-  useEffect(() => {
-    if (!isAuthenticated()) return;
-    // 初回は強制再取得（forceRefresh で sessionStorage キャッシュ無視）
-    loadJobOptions(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // 作業一覧 (jobOptions / jobOptionsStatus / reloadJobOptions) は KintaiContext で
+  // 起動時に月次データと並列取得済み。KintaiForm 側では fetch 責務を持たない。
 
   // 月同期
   useEffect(() => {
@@ -688,14 +652,12 @@ const KintaiForm: React.FC = () => {
                 onChange={(e) => {
                   const v = e.target.value;
                   if (v === "__retry__") {
-                    // 再読込トリガー: select の値は変更せず、再 fetch する
-                    void loadJobOptions(true);
+                    // 再読込トリガー: select の値は変更せず、Context 経由で再 fetch
+                    void reloadJobOptions(true);
                     return;
                   }
                   handleTaskJobChange(index, v);
                 }}
-                onFocus={() => loadJobOptions()}
-                onMouseDown={() => loadJobOptions()}
                 disabled={fieldsDisabled}
                 $empty={!task.job}
                 aria-label="作業内容"
@@ -743,12 +705,7 @@ const KintaiForm: React.FC = () => {
             </TaskCard>
           ))}
           {!fieldsDisabled && (
-            <TaskAddBtn
-              type="button"
-              onClick={handleAddTask}
-              onMouseEnter={() => loadJobOptions()}
-              onTouchStart={() => loadJobOptions()}
-            >
+            <TaskAddBtn type="button" onClick={handleAddTask}>
               <PlusIcon strokeWidth={2.4} />
               <span>作業を追加</span>
             </TaskAddBtn>

@@ -12,9 +12,21 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
-import { getMonthlyData, overlayPendingOnto } from "../utils/apiService";
+import {
+  getMonthlyData,
+  getJobWageOptions,
+  isAuthenticated,
+  overlayPendingOnto,
+} from "../utils/apiService";
 import { KintaiRecord } from "../types";
 import { entryStatusManager } from "../utils/entryStatusManager";
+
+export type JobOptionsStatus = "loading" | "ready" | "needs_retry";
+
+export interface JobWageOption {
+  job: string;
+  wage: number | null;
+}
 
 interface KintaiContextType {
   monthlyData: KintaiRecord[];
@@ -39,6 +51,10 @@ interface KintaiContextType {
     match: boolean;
   };
   initializeEntryStatusCache: () => Promise<void>;
+  // 作業内容（時給マスタ）— 起動時に月次データと並列取得して全画面共有
+  jobOptions: JobWageOption[];
+  jobOptionsStatus: JobOptionsStatus;
+  reloadJobOptions: (forceRefresh?: boolean) => Promise<void>;
 }
 
 const KintaiContext = createContext<KintaiContextType | undefined>(undefined);
@@ -49,6 +65,12 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
   const [monthlyData, setMonthlyData] = useState<KintaiRecord[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
 
+  // 作業内容（時給マスタ）— 起動時に月次データと並列取得し、Context で全画面共有。
+  // KintaiForm から個別 fetch する必要をなくし、リスト空が見える瞬間を物理的に消滅させる。
+  const [jobOptions, setJobOptions] = useState<JobWageOption[]>([]);
+  const [jobOptionsStatus, setJobOptionsStatus] =
+    useState<JobOptionsStatus>("loading");
+
   // 現在表示中の年月を管理
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
@@ -56,6 +78,40 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
 
   // 重複リクエスト防止のためのフラグ
   const [lastFetchKey, setLastFetchKey] = useState<string>("");
+
+  // 時給マスタの取得（成功時 ready / 失敗時 needs_retry）。
+  // 認証エラーは callGAS が AuthenticationError throw + /login 強制遷移するため
+  // ここの catch には到達しない。
+  const reloadJobOptions = useCallback(
+    async (forceRefresh = false): Promise<void> => {
+      setJobOptionsStatus("loading");
+      try {
+        const list = await getJobWageOptions({ forceRefresh });
+        setJobOptions(list);
+        setJobOptionsStatus("ready");
+        if (list.length === 0) {
+          // 想定外: 時給設定シートが空 / 名前違い等
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[KintaiContext] 時給マスタが空配列です。スプレッドシートを確認してください。",
+          );
+        }
+      } catch (e) {
+        setJobOptionsStatus("needs_retry");
+        // eslint-disable-next-line no-console
+        console.error("[KintaiContext] reloadJobOptions failed:", e);
+      }
+    },
+    [],
+  );
+
+  // 起動時に時給マスタを 1 回だけ強制取得（forceRefresh で sessionStorage 無視）。
+  // 月次データと並列に走り、LoadingModal 中に完了させる。
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    void reloadJobOptions(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 月間データ取得関数
   const fetchMonthlyData = useCallback(
@@ -318,6 +374,9 @@ export const KintaiProvider: React.FC<{ children: ReactNode }> = ({
     refreshData,
     compareLogics,
     initializeEntryStatusCache,
+    jobOptions,
+    jobOptionsStatus,
+    reloadJobOptions,
   };
 
   return (
