@@ -35,7 +35,7 @@ var WAGE_MASTER_SPREADSHEET_ID = '1XF8QIoudGmRSYavHZ4CkZQjlEUlaaEULxcuWZVOlIuE';
 var WAGE_MASTER_SHEET_NAME = '時給設定';
 var WAGE_MASTER_CACHE_KEY_LIST = 'job_wage_master_v1';   // [{job, wage}] 形式
 var WAGE_MASTER_CACHE_KEY_MAP = 'job_wage_master_map_v1'; // {job: wage} 形式
-var WAGE_MASTER_CACHE_TTL_SEC = 1800; // 30 分
+var WAGE_MASTER_CACHE_TTL_SEC = 300;  // 5 分（時給設定シート編集→ユーザー反映の最大遅延を 約30-35 分 → 約 5-10 分に短縮）
 var MONTHLY_CACHE_TTL_SEC = 300;      // 5 分
 
 // ════════════════════════════════════════════════════════════════════
