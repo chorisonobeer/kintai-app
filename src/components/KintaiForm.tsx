@@ -214,34 +214,40 @@ const KintaiForm: React.FC = () => {
     setWorkingTime(calculateWorkingTime(startTime, endTime, breakTime));
   }, [startTime, endTime, breakTime]);
 
-  // 作業一覧（時給設定シート由来）— マウント時に即ロード。
-  // 初回は forceRefresh: true で GAS / フロント両方のキャッシュを無視し、
-  // スプレッドシート「時給設定」シートを必ず再読込する。
-  // 過去の空キャッシュ残留事故（30 分間ずっと空が返る）の再発防止策。
+  // 作業一覧（時給設定シート由来）の取得 state machine。
+  // - "loading"     : fetch 中
+  // - "ready"       : jobOptions に値あり (10件 or 空)
+  // - "needs_retry" : 通信エラー等で取得失敗 → ドロップダウンに「再読込」option を表示
+  // 認証エラーは getJobWageOptions / callGAS が AuthenticationError を throw し、
+  // グローバルハンドラで /login 強制遷移するため、ここに到達しない (I2 不変条件)。
+  type JobOptionsStatus = "loading" | "ready" | "needs_retry";
+  const [jobOptionsStatus, setJobOptionsStatus] =
+    useState<JobOptionsStatus>("loading");
   const jobOptionsLoadedRef = useRef(false);
-  const [jobOptionsLoading, setJobOptionsLoading] = useState(false);
+
   const loadJobOptions = async (forceRefresh = false) => {
     if (!forceRefresh && jobOptionsLoadedRef.current) return;
     jobOptionsLoadedRef.current = true;
-    setJobOptionsLoading(true);
+    setJobOptionsStatus("loading");
     try {
       const list = await getJobWageOptions({ forceRefresh });
       setJobOptions(list);
-      // 取得失敗・空配列は console にだけ落とす（UI には出さない）
+      setJobOptionsStatus("ready");
       if (list.length === 0) {
-        console.warn("[KintaiForm] 時給マスタが空配列です。スプレッドシートのシート名/データを確認してください。");
+        console.warn(
+          "[KintaiForm] 時給マスタが空配列です。スプレッドシートのシート名/データを確認してください。",
+        );
       }
     } catch (e) {
       jobOptionsLoadedRef.current = false;
+      setJobOptionsStatus("needs_retry");
       console.error("[KintaiForm] loadJobOptions failed:", e);
-    } finally {
-      setJobOptionsLoading(false);
     }
   };
 
   useEffect(() => {
     if (!isAuthenticated()) return;
-    // 初回は強制再取得（GAS の空キャッシュ事故の救済も兼ねる）
+    // 初回は強制再取得（forceRefresh で sessionStorage キャッシュ無視）
     loadJobOptions(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -679,7 +685,15 @@ const KintaiForm: React.FC = () => {
             <TaskCard key={index}>
               <TaskJobSelect
                 value={task.job}
-                onChange={(e) => handleTaskJobChange(index, e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "__retry__") {
+                    // 再読込トリガー: select の値は変更せず、再 fetch する
+                    void loadJobOptions(true);
+                    return;
+                  }
+                  handleTaskJobChange(index, v);
+                }}
                 onFocus={() => loadJobOptions()}
                 onMouseDown={() => loadJobOptions()}
                 disabled={fieldsDisabled}
@@ -687,18 +701,23 @@ const KintaiForm: React.FC = () => {
                 aria-label="作業内容"
               >
                 <option value="">
-                  {jobOptionsLoading && jobOptions.length === 0
+                  {jobOptionsStatus === "loading"
                     ? "読込中..."
                     : "作業を選択"}
                 </option>
-                {jobOptions.map((opt) => (
-                  <option key={opt.job} value={opt.job}>
-                    {opt.job}
-                    {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
-                  </option>
-                ))}
+                {jobOptionsStatus === "ready" &&
+                  jobOptions.map((opt) => (
+                    <option key={opt.job} value={opt.job}>
+                      {opt.job}
+                      {opt.wage !== null ? ` / ¥${opt.wage}` : ""}
+                    </option>
+                  ))}
+                {jobOptionsStatus === "needs_retry" && (
+                  <option value="__retry__">再読込</option>
+                )}
                 {/* 既存値が現マスタに存在しない場合の互換表示（自動消去防止） */}
                 {task.job &&
+                  jobOptionsStatus === "ready" &&
                   !jobOptions.some((o) => o.job === task.job) && (
                     <option value={task.job}>{task.job}</option>
                   )}

@@ -56,12 +56,6 @@ const App: React.FC = () => {
       // localStorage エラーは無視
     }
 
-    // 起動時の強制バージョン同期: HTML 埋め込みの build-time と
-    // サーバー最新 version.json の buildTime を比較し、ずれていれば
-    // SW キャッシュ全削除 + リロード（PWA は常に最新で起動）。
-    // 一致時は何もしない（無限リロード防止）。
-    forceLatestOnLaunch();
-
     // Service Workerの登録とバックグラウンド同期の初期化
     initializeServiceWorker();
 
@@ -69,98 +63,33 @@ const App: React.FC = () => {
     initPendingSaveQueue();
   }, []);
 
-  // 起動時バージョン同期: HTML meta build-time と server version.json を突合。
-  // 不一致 = 古い HTML/JS で起動している → キャッシュ全削除 + reload。
-  // 一致 = 既に最新 → 何もせず通常起動。
-  const forceLatestOnLaunch = async () => {
-    try {
-      const meta = document.querySelector('meta[name="build-time"]');
-      const htmlBuildTime = meta?.getAttribute("content") || "";
-      const res = await fetch("/version.json?t=" + Date.now(), {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-        },
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { buildTime?: string };
-      const serverBuildTime = data?.buildTime || "";
-      if (!htmlBuildTime || !serverBuildTime) return;
-      if (htmlBuildTime === serverBuildTime) return;
-
-      // 不一致: 古い HTML/JS が動いている。SW キャッシュ全削除 + 強制リロード。
-      try {
-        if ("caches" in window) {
-          const names = await caches.keys();
-          await Promise.all(
-            names
-              .filter((n) => n.startsWith("kintai-app-"))
-              .map((n) => caches.delete(n)),
-          );
-        }
-      } catch {
-        // キャッシュ削除失敗は無視（reload で次回再取得される）
-      }
-      if (!window.__kintaiReloading) {
-        window.__kintaiReloading = true;
-        window.location.reload();
-      }
-    } catch {
-      // ネットワーク失敗時は通常起動
-    }
-  };
-
-  // Service Worker初期化処理
+  // Service Worker 初期化処理（最小限）
+  // - デフォルト挙動で SW 登録のみ。自動 reload や controllerchange ハンドラは持たない。
+  // - 新バージョン検出はクライアントが UPDATE_APPLIED を受けても reload せず、
+  //   次回起動時に自然適用させる（I4 不変条件）。
   const initializeServiceWorker = async () => {
-    if ("serviceWorker" in navigator) {
-      try {
-        performance.mark("PWA:sw-register-start");
-        // updateViaCache: 'none' = SW スクリプト自体を毎回ネットワーク fetch。
-        // iOS Safari PWA で /sw.js が HTTP キャッシュから返って更新が保留される
-        // 事故を防ぐ。
-        const registration = await navigator.serviceWorker.register("/sw.js", {
-          updateViaCache: "none",
-        });
-        performance.mark("PWA:sw-registered");
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
 
-        // 起動時に SW の更新チェックを明示要求（iOS PWA 24h 遅延対策）
-        try {
-          await registration.update();
-        } catch {
-          // update 失敗は無視（既に最新の場合や一時的なネットワーク失敗）
-        }
+      // メッセージ受信リスナー
+      navigator.serviceWorker.addEventListener(
+        "message",
+        handleServiceWorkerMessage,
+      );
 
-        // 新 SW が controlling に切り替わったら自動 reload。
-        // ハッシュ付き bundle が古いまま動き続けるのを防ぐ最後の砦。
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
-          if (window.__kintaiReloading) return;
-          window.__kintaiReloading = true;
-          window.location.reload();
-        });
-
-        // メッセージ受信リスナー
-        navigator.serviceWorker.addEventListener(
-          "message",
-          handleServiceWorkerMessage,
-        );
-
-        // 認証済みユーザーの場合、バックグラウンド同期を開始
-        if (isAuthenticated()) {
-          await initializeBackgroundSync(registration);
-        }
-
-        // SW が制御状態になるのを待ってからメッセージ送信
-        const readyRegistration = await navigator.serviceWorker.ready;
-        swRegistrationRef.current = readyRegistration;
-        performance.mark("PWA:check-for-updates");
-        readyRegistration.active?.postMessage({ type: "CHECK_FOR_UPDATES" });
-      } catch (error) {
-        // Service Worker登録失敗時は通常起動
-        setShowVersionCheckModal(false);
+      // 認証済みユーザーの場合、バックグラウンド同期を開始
+      if (isAuthenticated()) {
+        await initializeBackgroundSync(registration);
       }
-    } else {
-      // Service Workerがサポートされていません
+
+      // SW が制御状態になるのを待ってからメッセージ送信
+      const readyRegistration = await navigator.serviceWorker.ready;
+      swRegistrationRef.current = readyRegistration;
+      readyRegistration.active?.postMessage({ type: "CHECK_FOR_UPDATES" });
+    } catch {
+      // Service Worker 登録失敗時は通常起動
+      setShowVersionCheckModal(false);
     }
   };
 
@@ -223,21 +152,14 @@ const App: React.FC = () => {
       }
 
       case "UPDATE_APPLIED":
-        // 更新適用完了: 起動時に必ず最新版で動かすため即時リロード。
-        // CHECK_FOR_UPDATES は initializeServiceWorker から起動時に1回だけ送信されるため、
-        // この時点では作業データはまだ無く、リロードによる作業中断リスクはない。
+        // 更新適用完了: 自動 reload は廃止 (I4 不変条件)。
+        // 新バージョンは次回起動時に自然適用される（HTML はネットワーク優先 + no-cache）。
+        // 作業中断リスクをユーザーに押し付けない設計。
+        setShowVersionCheckModal(false);
         try {
           localStorage.setItem("kintai_updated_at", String(Date.now()));
         } catch {
           // localStorage 書き込み失敗は無視
-        }
-        // モーダルは reload で消える。reload を二重発火させない最小ガード。
-        if (!window.__kintaiReloading) {
-          window.__kintaiReloading = true;
-          // 念のため SW に切替指示が伝わってから reload するため microtask 1 つ挟む
-          Promise.resolve().then(() => {
-            window.location.reload();
-          });
         }
         break;
 

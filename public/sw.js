@@ -1,5 +1,5 @@
 // CACHE_NAME はビルド時に scripts/set-build-time.js で自動バンプされる
-const CACHE_NAME = 'kintai-app-mov0pdce';
+const CACHE_NAME = 'kintai-app-mowaat3m';
 // バージョン自動チェック: ドキュメント取得毎に実施
 
 // Google Fonts は install ブロッキングから除外（FOUT許容、runtime cache に任せる）
